@@ -37,6 +37,12 @@
         body: JSON.stringify({ question }),
       });
     },
+    reviseMap(mapId, prompt) {
+      return request('/api/maps/' + encodeURIComponent(mapId) + '/revise', {
+        method: 'POST',
+        body: JSON.stringify({ prompt }),
+      });
+    },
     renameMap(mapId, title) {
       return request('/api/maps/' + encodeURIComponent(mapId), {
         method: 'PATCH',

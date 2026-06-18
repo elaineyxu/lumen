@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { mockCompile } = require('./mockCompiler');
 const { runLumenWorkflow } = require('./workflow');
-const { seedMapFromQuestion } = require('./workflow/mapSeeder');
+const { seedMapFromQuestion, reviseMapWithPrompt } = require('./workflow/mapSeeder');
 const { validateCompileResult } = require('./schema');
 const {
   readRuns,
@@ -275,6 +275,54 @@ async function handleCreateMap(req, res) {
   sendJson(res, 200, { map, state });
 }
 
+async function handleReviseMap(req, res, mapId) {
+  const body = await readBody(req);
+  const prompt = String(body.prompt || '').trim();
+  if (!prompt) {
+    sendJson(res, 400, { error: 'prompt is required' });
+    return;
+  }
+  const aiSettings = readAiSettings();
+  if (!hasLlmApiKey(aiSettings)) {
+    sendJson(res, 400, {
+      error: 'LLM API key is required to revise a knowledge map.',
+      code: 'llm_not_configured',
+    });
+    return;
+  }
+
+  const currentState = readState();
+  const currentMap = (currentState.extraMaps || []).find((map) => map.id === mapId);
+  if (!currentMap) {
+    sendJson(res, 404, { error: 'created map not found' });
+    return;
+  }
+
+  let revised;
+  try {
+    revised = await reviseMapWithPrompt(currentMap, prompt);
+  } catch (error) {
+    sendJson(res, 502, { error: error.message || String(error), code: 'map_revision_failed' });
+    return;
+  }
+
+  const revisedNodeIds = new Set((revised.nodes || []).map((node) => node.id));
+  const state = updateState((current) => {
+    const litByMap = { ...(current.litByMap || {}) };
+    if (litByMap[mapId]) {
+      litByMap[mapId] = Object.fromEntries(
+        Object.entries(litByMap[mapId]).filter(([nodeId]) => revisedNodeIds.has(nodeId))
+      );
+    }
+    return {
+      ...current,
+      extraMaps: (current.extraMaps || []).map((map) => map.id === mapId ? revised : map),
+      litByMap,
+    };
+  });
+  sendJson(res, 200, { map: revised, state });
+}
+
 async function handleRenameMap(req, res, mapId) {
   const body = await readBody(req);
   const title = shortTitle(body.title, '').trim();
@@ -488,6 +536,12 @@ async function route(req, res) {
 
     if (req.method === 'POST' && url.pathname === '/api/maps') {
       await handleCreateMap(req, res);
+      return;
+    }
+
+    const mapRevision = url.pathname.match(/^\/api\/maps\/([^/]+)\/revise$/);
+    if (req.method === 'POST' && mapRevision) {
+      await handleReviseMap(req, res, decodeURIComponent(mapRevision[1]));
       return;
     }
 

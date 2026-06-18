@@ -312,6 +312,29 @@ function App() {
       });
   };
 
+  const reviseMap = (mapId, prompt)=>{
+    const current = maps.find(m=>m.id===mapId);
+    if(!current || !(current.seedMeta && current.seedMeta.generatedBy === 'mapSeeder')){
+      return Promise.reject(new Error(window.t('revise_created_only')));
+    }
+    const text = String(prompt||'').trim();
+    if(!text) return Promise.reject(new Error(window.t('revise_prompt_required')));
+    if(!window.LumenApi || !window.LumenApi.reviseMap){
+      return Promise.reject(new Error('Lumen backend is required to revise a map with AI.'));
+    }
+    return window.LumenApi.reviseMap(mapId, text)
+      .then(payload=>{
+        const map = payload && payload.map;
+        if(!map || !Array.isArray(map.nodes) || map.nodes.length < 7 || !map.seedMeta || map.seedMeta.generatedBy !== 'mapSeeder'){
+          throw new Error('Map API returned an invalid AI revision.');
+        }
+        applyWorkspaceState(payload);
+        setActiveMapId(map.id);
+        setMapSelected(null);
+        return map;
+      });
+  };
+
   const renameMap = (mapId)=>{
     const current = maps.find(m=>m.id===mapId);
     if(!current || !(current.seedMeta && current.seedMeta.generatedBy === 'mapSeeder')) return;
@@ -415,7 +438,7 @@ function App() {
             onOpenEntry={openEntry}
             onGotoMapNode={gotoMapNode} onOpenSource={openSource}
             onAddSource={askAddSource} onCreateMap={()=>setCreating(true)}
-            onRenameMap={renameMap} onDeleteMap={deleteMap} />
+            onRenameMap={renameMap} onDeleteMap={deleteMap} onReviseMap={reviseMap} />
         )}
         {view==='wiki' && (
           <WikiView data={data} litByMap={litByMap}

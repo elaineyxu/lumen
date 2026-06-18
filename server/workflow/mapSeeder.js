@@ -1,4 +1,6 @@
 const { runLlmStage } = require('../llm/stageRunner');
+const { spreadMapNodes } = require('./mapLayout');
+const { normalizeMapOverview } = require('./mapSummary');
 
 const HUES = ['blue', 'teal', 'amber', 'coral', 'violet'];
 const MAP_LIMITS = {
@@ -39,6 +41,12 @@ function shortTitle(text, fallback) {
   return clean.length > MAP_LIMITS.maxLabelChars ? clean.slice(0, MAP_LIMITS.maxLabelChars - 2) + '...' : clean;
 }
 
+function shortReason(text, fallback) {
+  const clean = String(text || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  if (!clean) return fallback;
+  return clean.length > 130 ? clean.slice(0, 128) + '...' : clean;
+}
+
 function isAllowedMapLabel(label) {
   const clean = String(label || '').trim().toLowerCase();
   if (!clean) return false;
@@ -54,6 +62,7 @@ const MAP_SEED_SCHEMA = {
     title: { type: 'string' },
     domain: { type: 'string' },
     question: { type: 'string' },
+    layoutReason: { type: 'string' },
     clusters: {
       type: 'array',
       items: {
@@ -103,7 +112,7 @@ const MAP_SEED_SCHEMA = {
       },
     },
   },
-  required: ['title', 'domain', 'question', 'clusters', 'nodes', 'links'],
+  required: ['title', 'domain', 'question', 'layoutReason', 'clusters', 'nodes', 'links'],
 };
 
 function normalizeMapSeed(output, question) {
@@ -156,6 +165,7 @@ function normalizeMapSeed(output, question) {
   if (nodes.length < MAP_LIMITS.minNodes) {
     throw new Error('Map seed did not meet minimum node count after filtering');
   }
+  const spreadNodes = spreadMapNodes(nodes);
 
   const links = (Array.isArray(output.links) ? output.links : [])
     .filter((link) => nodeIds.has(slugify(link.from, '')) && nodeIds.has(slugify(link.to, '')))
@@ -168,12 +178,18 @@ function normalizeMapSeed(output, question) {
     title: shortTitle(output.title || question, 'New map'),
     question: output.question || question,
     domain: output.domain || 'New field',
-    accentHue: nodes[0].hue || 'blue',
+    layoutReason: normalizeMapOverview(output.layoutReason, {
+      title: output.title || question,
+      question: output.question || question,
+      domain: output.domain,
+      clusters,
+    }),
+    accentHue: spreadNodes[0].hue || 'blue',
     created: 'just now',
     updated: 'just now',
     clusters,
-    nodes,
-    links: links.length ? links : nodes.slice(1, 4).map((node) => [nodes[0].id, node.id, 'dash']),
+    nodes: spreadNodes,
+    links: links.length ? links : spreadNodes.slice(1, 4).map((node) => [spreadNodes[0].id, node.id, 'dash']),
     seedMeta: {
       generatedBy: 'mapSeeder',
       promptVersion: 'lumen.map.seed.v1',
@@ -200,6 +216,7 @@ async function seedMapFromQuestion(question) {
       fieldDefinitions: {
         title: 'Short map title, not the full question.',
         domain: 'Research domain or field.',
+        layoutReason: 'One concise user-facing overview or definition of the subject/question. Define what the topic is; do not explain the visual layout.',
         clusters: '3-5 conceptual regions. Each region should be a learning section, not a vague category.',
         nodes: '7-10 concepts/questions. Include one central hub and 1-3 nodes per cluster.',
         kind: 'One of core_concept, sub_question, mechanism, theory, evidence_type, debate, knowledge_gap.',
@@ -223,9 +240,11 @@ async function seedMapFromQuestion(question) {
         'Things that are merely associated with the topic but do not help the user learn the question.',
       ],
       layoutRules: [
-        'Use x/y percentages from 8-92 so nodes are spread out.',
+        'Use x percentages from 10-90 and y percentages from 12-84 so labels have room.',
         'Make the center/hub node near x=50,y=42.',
         'Place clusters in visually separate regions.',
+        'Never stack nodes: any two node centers must be at least 12 percentage points apart.',
+        'Avoid label overlap: if two nodes share a similar y, keep their x values at least 14-20 percentage points apart.',
         'Keep labels short: usually 2-5 words, max 34 characters.',
         'Include unknowns/gaps, not only known concepts.',
         'The map should be readable at a glance: no dense link hairball.',
@@ -237,6 +256,9 @@ async function seedMapFromQuestion(question) {
         'Do not put more than 3 nodes in one cluster.',
         'Make node ids stable slugs.',
         'Every node must have a kind and a startingQuestion.',
+        'No overlapping node dots or labels.',
+        'layoutReason must be one sentence and no more than 120 characters.',
+        'layoutReason must not mention layout, center, axis, clusters, nodes, arrangement, or evidence placement.',
       ],
     }, null, 2),
   });
@@ -256,8 +278,94 @@ async function seedMapFromQuestion(question) {
   return map;
 }
 
+async function reviseMapWithPrompt(map, prompt) {
+  const revisionPrompt = String(prompt || '').trim();
+  if (!map || !map.id) throw new Error('Map is required for revision');
+  if (!revisionPrompt) throw new Error('Revision prompt is required');
+
+  const llm = await runLlmStage({
+    stage: 'mapSeeder',
+    schemaName: 'lumen_map_seed',
+    schema: MAP_SEED_SCHEMA,
+    parsed: { metadata: { title: map.title || map.question || 'Map revision', characterCount: revisionPrompt.length } },
+    chunks: [],
+    system: [
+      'You are Lumen map editor.',
+      'A user already has an understanding map and asks to revise it.',
+      'Apply the requested change to the graph structure, labels, clusters, and layout.',
+      'Do not answer the topic as an essay. Return a revised navigable knowledge graph seed.',
+    ].join(' '),
+    user: JSON.stringify({
+      revisionPrompt,
+      currentMap: {
+        title: map.title,
+        domain: map.domain,
+        question: map.question,
+        layoutReason: map.layoutReason || '',
+        clusters: map.clusters || {},
+        nodes: (map.nodes || []).map((node) => ({
+          id: node.id,
+          label: node.label,
+          cluster: node.cluster,
+          x: node.x,
+          y: node.y,
+          size: node.size,
+          hue: node.hue,
+          kind: node.kind || 'core_concept',
+          why: node.why || '',
+          startingQuestion: node.startingQuestion || '',
+        })),
+        links: (map.links || []).map((link) => ({
+          from: link[0],
+          to: link[1],
+          type: link[2] === 'solid' ? 'solid' : 'dash',
+        })),
+      },
+      fieldDefinitions: {
+        layoutReason: 'One concise user-facing overview or definition of the revised subject/question. Define what the topic is; do not explain the visual layout.',
+        clusters: '3-5 conceptual regions. Keep meaningful regions, not vague buckets.',
+        nodes: '7-10 concepts/questions. Keep labels short and concrete.',
+        links: 'No more than 14 relationships. Use dash for tentative links and solid for structural links.',
+      },
+      hardRules: [
+        'Only return JSON matching the schema.',
+        'Do not invent sources or citations.',
+        'Respect the user revision prompt first.',
+        'Keep the original guiding question unless the user explicitly asks to reframe it.',
+        'Create 3-5 clusters, 7-10 nodes, and at most 14 links.',
+        'Do not put more than 3 nodes in one cluster.',
+        'No overlapping node dots or labels; keep close-y nodes separated horizontally.',
+        'layoutReason must be one sentence and no more than 120 characters.',
+        'layoutReason must not mention layout, center, axis, clusters, nodes, arrangement, or evidence placement.',
+      ],
+    }, null, 2),
+  });
+
+  if (!llm.ok || !llm.output) {
+    const error = new Error(llm.error || llm.reason || 'Map revision LLM unavailable');
+    error.llmStage = llm;
+    throw error;
+  }
+
+  const revised = normalizeMapSeed(llm.output, map.question || map.title || 'Map revision');
+  revised.id = map.id;
+  revised.created = map.created || revised.created;
+  revised.updated = 'just now';
+  revised.seedMeta = {
+    ...(map.seedMeta || {}),
+    ...revised.seedMeta,
+    generatedBy: 'mapSeeder',
+    model: llm.model,
+    stage: llm.stage,
+    revision: Number((map.seedMeta && map.seedMeta.revision) || 0) + 1,
+    lastRevisionPrompt: shortReason(revisionPrompt, revisionPrompt),
+  };
+  return revised;
+}
+
 module.exports = {
   seedMapFromQuestion,
+  reviseMapWithPrompt,
   normalizeMapSeed,
   MAP_SEED_SCHEMA,
   MAP_LIMITS,

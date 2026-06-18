@@ -52,7 +52,9 @@ function NodeBlob({ node, lit, active, dimmed, onClick, onHover, lineStyle }) {
 
   return (
     <div
+      data-map-node
       onClick={onClick}
+      onPointerDown={(e)=>e.stopPropagation()}
       onMouseEnter={()=>onHover&&onHover(node.id)}
       onMouseLeave={()=>onHover&&onHover(null)}
       style={{

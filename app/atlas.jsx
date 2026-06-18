@@ -7,7 +7,7 @@ const { useState:useStateAt, useMemo:useMemoAt } = React;
 function Atlas({ data, litMap, litByMap, lineStyle, activeMapId, setActiveMapId,
                 selected, setSelected, onOpenEntry,
                 onGotoMapNode, onOpenSource, onAddSource, onCreateMap,
-                onRenameMap, onDeleteMap }) {
+                onRenameMap, onDeleteMap, onReviseMap }) {
   const { MAPS } = data;
   const [q, setQ] = useStateAt('');
   const activeMap = MAPS.find(m=>m.id===activeMapId) || MAPS[0];
@@ -80,7 +80,7 @@ function Atlas({ data, litMap, litByMap, lineStyle, activeMapId, setActiveMapId,
         {activeMap ? (
           <ExpertMap map={activeMap} litMap={activeMap.id===activeMapId?litMap:{}} lineStyle={lineStyle}
             selected={selected} setSelected={setSelected}
-            onOpenEntry={onOpenEntry} onAddSource={onAddSource} />
+            onOpenEntry={onOpenEntry} onAddSource={onAddSource} onReviseMap={onReviseMap} />
         ) : (
           <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center', background:'var(--paper)' }}>
             <div style={{ textAlign:'center', maxWidth:360 }}>

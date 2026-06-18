@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const { normalizeStageSettings } = require('./llm/modelCatalog');
+const { spreadMapNodes } = require('./workflow/mapLayout');
+const { normalizeMapOverview } = require('./workflow/mapSummary');
 
 const DATA_DIR = path.join(__dirname, '..', '.data');
 const RUNS_FILE = path.join(DATA_DIR, 'compile-runs.json');
@@ -86,8 +88,9 @@ function normalizeState(state) {
         if (!map || !map.seedMeta || map.seedMeta.generatedBy !== 'mapSeeder') return map;
         return {
           ...map,
+          layoutReason: normalizeMapOverview(map.layoutReason, map),
           nodes: Array.isArray(map.nodes)
-            ? map.nodes.map((node) => ({ ...node, explored: 0, sources: Number(node.sources || 0) }))
+            ? spreadMapNodes(map.nodes.map((node) => ({ ...node, explored: 0, sources: Number(node.sources || 0) })))
             : [],
         };
       })
