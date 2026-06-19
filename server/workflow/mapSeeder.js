@@ -1,6 +1,7 @@
 const { runLlmStage } = require('../llm/stageRunner');
 const { spreadMapNodes } = require('./mapLayout');
 const { normalizeMapOverview } = require('./mapSummary');
+const { assessMapQuality } = require('./mapQuality');
 
 const HUES = ['blue', 'teal', 'amber', 'coral', 'violet'];
 const MAP_LIMITS = {
@@ -114,6 +115,132 @@ const MAP_SEED_SCHEMA = {
   },
   required: ['title', 'domain', 'question', 'layoutReason', 'clusters', 'nodes', 'links'],
 };
+
+function attachQuality(map, quality, extra = {}) {
+  return {
+    ...map,
+    seedMeta: {
+      ...(map.seedMeta || {}),
+      quality: {
+        ...(quality || assessMapQuality(map, { limits: MAP_LIMITS })),
+        ...extra,
+      },
+    },
+  };
+}
+
+function mapForQualityPrompt(map) {
+  return {
+    title: map.title,
+    domain: map.domain,
+    question: map.question,
+    layoutReason: map.layoutReason || '',
+    clusters: Object.entries(map.clusters || {}).map(([id, cluster]) => ({
+      id,
+      label: cluster.label,
+      note: cluster.note || '',
+      hue: cluster.hue,
+    })),
+    nodes: (map.nodes || []).map((node) => ({
+      id: node.id,
+      label: node.label,
+      cluster: node.cluster,
+      x: node.x,
+      y: node.y,
+      size: node.size,
+      hue: node.hue,
+      kind: node.kind || 'core_concept',
+      why: node.why || '',
+      startingQuestion: node.startingQuestion || '',
+    })),
+    links: (map.links || []).map((link) => ({
+      from: link[0],
+      to: link[1],
+      type: link[2] === 'solid' ? 'solid' : 'dash',
+      label: link[3] || '',
+    })),
+  };
+}
+
+async function evaluateAndRepairLowConfidenceMap(map, initialQuality, question) {
+  if (!initialQuality || initialQuality.confidence !== 'low') return attachQuality(map, initialQuality);
+
+  const llm = await runLlmStage({
+    stage: 'mapSeeder',
+    schemaName: 'lumen_map_seed_quality_repair',
+    schema: MAP_SEED_SCHEMA,
+    parsed: { metadata: { title: map.title || question, characterCount: JSON.stringify(initialQuality.issues || []).length } },
+    chunks: [],
+    system: [
+      'You are Lumen map quality editor.',
+      'A generated understanding map failed fast quality checks.',
+      'Repair only the weak nodes, vague labels, missing node kinds, and necessary links.',
+      'Preserve the original guiding question and as much good structure as possible.',
+    ].join(' '),
+    user: JSON.stringify({
+      question: question || map.question,
+      currentMap: mapForQualityPrompt(map),
+      qualityIssues: initialQuality.issues || [],
+      task: 'Return a repaired map seed. Do not explain the assessment; only return JSON matching the schema.',
+      repairRules: [
+        'Replace generic labels with concrete concepts, mechanisms, evidence types, debates, or knowledge gaps.',
+        'Keep 3-5 clusters, 7-10 nodes, and no more than 14 links.',
+        'Keep 1-3 nodes per cluster.',
+        'Every node must have a concrete why and a useful startingQuestion.',
+        'Include at least one mechanism or evidence_type node.',
+        'Include at least one debate or knowledge_gap node.',
+        'Avoid duplicate or near-duplicate nodes.',
+        'Do not invent sources or citations.',
+      ],
+    }, null, 2),
+  });
+
+  if (!llm.ok || !llm.output) {
+    return attachQuality(map, initialQuality, {
+      evaluator: {
+        attempted: true,
+        ok: false,
+        reason: llm.error || llm.reason || 'quality repair unavailable',
+      },
+    });
+  }
+
+  try {
+    const repaired = normalizeMapSeed(llm.output, question || map.question || map.title);
+    repaired.id = map.id;
+    repaired.created = map.created || repaired.created;
+    repaired.updated = map.updated || repaired.updated;
+    const repairedQuality = assessMapQuality(repaired, { limits: MAP_LIMITS });
+    return {
+      ...repaired,
+      seedMeta: {
+        ...(map.seedMeta || {}),
+        ...repaired.seedMeta,
+        generatedBy: 'mapSeeder',
+        promptVersion: 'lumen.map.seed.v1',
+        model: llm.model,
+        stage: llm.stage,
+        quality: {
+          ...repairedQuality,
+          evaluator: {
+            attempted: true,
+            ok: true,
+            previousConfidence: initialQuality.confidence,
+            previousScore: initialQuality.score,
+          },
+        },
+      },
+    };
+  } catch (error) {
+    return attachQuality(map, initialQuality, {
+      evaluator: {
+        attempted: true,
+        ok: false,
+        reason: error.message || String(error),
+      },
+    });
+  }
+}
 
 function normalizeMapSeed(output, question) {
   const mapId = 'map-' + Date.now();
@@ -269,12 +396,15 @@ async function seedMapFromQuestion(question) {
     throw error;
   }
 
-  const map = normalizeMapSeed(llm.output, question);
+  let map = normalizeMapSeed(llm.output, question);
+  const initialQuality = assessMapQuality(map, { limits: MAP_LIMITS });
   map.seedMeta = {
     ...map.seedMeta,
     model: llm.model,
     stage: llm.stage,
+    quality: initialQuality,
   };
+  map = await evaluateAndRepairLowConfidenceMap(map, initialQuality, question);
   return map;
 }
 
@@ -348,6 +478,7 @@ async function reviseMapWithPrompt(map, prompt) {
   }
 
   const revised = normalizeMapSeed(llm.output, map.question || map.title || 'Map revision');
+  const quality = assessMapQuality(revised, { limits: MAP_LIMITS });
   revised.id = map.id;
   revised.created = map.created || revised.created;
   revised.updated = 'just now';
@@ -359,6 +490,10 @@ async function reviseMapWithPrompt(map, prompt) {
     stage: llm.stage,
     revision: Number((map.seedMeta && map.seedMeta.revision) || 0) + 1,
     lastRevisionPrompt: shortReason(revisionPrompt, revisionPrompt),
+    quality: {
+      ...quality,
+      evaluator: { attempted: false, reason: 'prompt revision' },
+    },
   };
   return revised;
 }

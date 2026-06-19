@@ -55,6 +55,11 @@ function ExpertMap({ map, litMap, lineStyle, onOpenEntry, onAddSource, onReviseM
   const toggleCluster = (k)=> setHidden(prev=>{ const s=new Set(prev); s.has(k)?s.delete(k):s.add(k); return s; });
   const canRevise = Boolean(map.seedMeta && map.seedMeta.generatedBy === 'mapSeeder' && onReviseMap);
   const layoutReason = map.layoutReason || window.t('map_reason_fallback');
+  const quality = map.seedMeta && map.seedMeta.quality;
+  const qualityIssues = quality && Array.isArray(quality.issues) ? quality.issues.slice(0, 3) : [];
+  const qualityTone = quality && quality.confidence === 'high' ? 'var(--glow-teal)'
+    : quality && quality.confidence === 'medium' ? 'var(--glow-amber)'
+      : 'var(--glow-coral)';
   const viewportTransform = `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.scale})`;
   const diagnosisBottom = selNode ? 252 : 24;
 
@@ -188,6 +193,28 @@ function ExpertMap({ map, litMap, lineStyle, onOpenEntry, onAddSource, onReviseM
                 <Icon name="compass" s={12} c="var(--accent)"/> {window.t('map_layout')}
               </div>
               <div style={{ fontSize:12.5, lineHeight:1.5, color:'var(--ink-2)' }}>{layoutReason}</div>
+              {quality && (
+                <div style={qualityWrap}>
+                  <div style={{ display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' }}>
+                    <span style={{ ...qualityPill, borderColor:qualityTone }}>
+                      <span style={{ width:7, height:7, borderRadius:'50%', background:qualityTone }}/>
+                      {window.t('map_quality')}: {window.t('map_quality_' + quality.confidence)}
+                    </span>
+                    {typeof quality.score === 'number' && (
+                      <span className="mono-label" style={{ fontSize:8.5, color:'var(--ink-4)' }}>{quality.score}/100</span>
+                    )}
+                  </div>
+                  {qualityIssues.length > 0 && (
+                    <div style={{ marginTop:7, display:'flex', flexDirection:'column', gap:4 }}>
+                      {qualityIssues.map((issue, index)=>(
+                        <div key={(issue.code||'issue')+index} style={qualityIssue}>
+                          {issue.message}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <button onClick={resetViewport} title={window.t('reset_map_view')} style={viewResetBtn}>
               <Icon name="compass" s={14}/>
@@ -334,6 +361,12 @@ const covRow = { display:'flex', alignItems:'center', gap:9, width:'100%', textA
   border:'none', background:'transparent', borderRadius:7, transition:'opacity .2s' };
 const viewResetBtn = { width:28, height:28, borderRadius:8, flex:'none', display:'grid', placeItems:'center',
   border:'1px solid var(--hair)', background:'var(--card)', color:'var(--ink-3)' };
+const qualityWrap = { marginTop:10, paddingTop:9, borderTop:'1px solid var(--hair-soft)' };
+const qualityPill = { display:'inline-flex', alignItems:'center', gap:6, padding:'4px 8px', borderRadius:8,
+  border:'1px solid var(--hair)', background:'var(--card)', color:'var(--ink-2)',
+  fontFamily:'var(--mono)', fontSize:9.5, fontWeight:600, letterSpacing:'.06em', textTransform:'uppercase' };
+const qualityIssue = { fontSize:11.5, lineHeight:1.35, color:'var(--ink-3)', paddingLeft:10,
+  borderLeft:'2px solid var(--hair)' };
 const diagToggle = { marginTop:13, width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
   padding:'9px 11px', borderRadius:9, border:'1px solid var(--hair)', background:'var(--card)',
   color:'var(--ink-2)', fontSize:11.5, fontWeight:600, fontFamily:'var(--mono)', letterSpacing:'.08em', textTransform:'uppercase' };
