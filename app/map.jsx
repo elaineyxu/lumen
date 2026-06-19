@@ -56,6 +56,7 @@ function ExpertMap({ map, litMap, lineStyle, onOpenEntry, onAddSource, onReviseM
   const canRevise = Boolean(map.seedMeta && map.seedMeta.generatedBy === 'mapSeeder' && onReviseMap);
   const layoutReason = map.layoutReason || window.t('map_reason_fallback');
   const viewportTransform = `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.scale})`;
+  const diagnosisBottom = selNode ? 252 : 24;
 
   const isMapUiTarget = (target)=>{
     if(!target || !target.closest) return false;
@@ -179,7 +180,7 @@ function ExpertMap({ map, litMap, lineStyle, onOpenEntry, onAddSource, onReviseM
       </div>
 
       {/* diagnosis panel */}
-      <div data-map-ui style={{ position:'absolute', top:24, right:28, zIndex:40, width:326, maxHeight:'calc(100% - 48px)', overflowY:'auto', cursor:'default' }}>
+      <div data-map-ui style={{ position:'absolute', top:24, right:28, bottom:diagnosisBottom, zIndex:40, width:326, overflowY:'auto', cursor:'default' }}>
         <Frost style={{ padding:'15px 16px' }}>
           <div style={{ display:'flex', gap:12, alignItems:'flex-start', justifyContent:'space-between' }}>
             <div style={{ minWidth:0 }}>

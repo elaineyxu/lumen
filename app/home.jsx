@@ -80,33 +80,33 @@ function Home({ data, litByMap, inbox, onOpenMap, onOpenEntry, onGotoMapNode, go
           );})}
         </div>
 
-        {/* two columns: connections + open questions */}
-        <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:30, marginTop:54, alignItems:'start' }}>
-          <div>
-            <SectionHead title={window.t('cross_domain')} sub={window.t('cross_domain_sub')} icon="connect"/>
+        {/* insight columns */}
+        <div style={insightGrid}>
+          <HomeInsightSection title={window.t('cross_domain')} sub={window.t('cross_domain_sub')} icon="connect">
             <div style={{ display:'flex', flexDirection:'column', gap:12, marginTop:18 }}>
               {CONNECTIONS.map((c,i)=>{ const ea=LX.ENTRY_BY[c.a], eb=LX.ENTRY_BY[c.b]; const ma=LX.MAP_BY[c.aMap], mb=LX.MAP_BY[c.bMap];
                 return (
-                <div key={i} style={connCard}>
-                  <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-                    <button onClick={()=>onOpenEntry(c.a)} style={connChip}>
-                      <span style={{ width:7, height:7, borderRadius:'50%', background:`radial-gradient(circle,${hueColor(ma.accentHue)},transparent 70%)` }}/>
-                      {ea?ea.title:c.a}
-                    </button>
-                    <span style={{ color:'var(--ink-4)', display:'flex' }}><Icon name="connect" s={15}/></span>
-                    <button onClick={()=>onOpenEntry(c.b)} style={connChip}>
-                      <span style={{ width:7, height:7, borderRadius:'50%', background:`radial-gradient(circle,${hueColor(mb.accentHue)},transparent 70%)` }}/>
-                      {eb?eb.title:c.b}
-                    </button>
+                  <div key={i} style={connCard}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                      <button onClick={()=>onOpenEntry(c.a)} style={connChip}>
+                        <span style={{ width:7, height:7, borderRadius:'50%', background:`radial-gradient(circle,${hueColor(ma.accentHue)},transparent 70%)` }}/>
+                        {ea?ea.title:c.a}
+                      </button>
+                      <span style={{ color:'var(--ink-4)', display:'flex' }}><Icon name="connect" s={15}/></span>
+                      <button onClick={()=>onOpenEntry(c.b)} style={connChip}>
+                        <span style={{ width:7, height:7, borderRadius:'50%', background:`radial-gradient(circle,${hueColor(mb.accentHue)},transparent 70%)` }}/>
+                        {eb?eb.title:c.b}
+                      </button>
+                    </div>
+                    <p style={{ margin:'11px 0 0', fontSize:14, lineHeight:1.55, color:'var(--ink-2)', textWrap:'pretty' }}>{c.note}</p>
                   </div>
-                  <p style={{ margin:'11px 0 0', fontSize:14, lineHeight:1.55, color:'var(--ink-2)', textWrap:'pretty' }}>{c.note}</p>
-                </div>
-              );})}
+                );
+              })}
+              {!CONNECTIONS.length && <QuietPlaceholder rows={3}/>}
             </div>
-          </div>
+          </HomeInsightSection>
 
-          <div>
-            <SectionHead title={window.t('open_questions')} sub={window.t('open_questions_sub')} icon="question"/>
+          <HomeInsightSection title={window.t('open_questions')} sub={window.t('open_questions_sub')} icon="question">
             <div style={{ display:'flex', flexDirection:'column', gap:2, marginTop:18 }}>
               {openQs.map((o,i)=>(
                 <button key={i} onClick={()=> o.entry? onOpenEntry(o.entry) : onGotoMapNode(o.map, o.node)} style={qRow}
@@ -119,16 +119,13 @@ function Home({ data, litByMap, inbox, onOpenMap, onOpenEntry, onGotoMapNode, go
                   </span>
                 </button>
               ))}
+              {!openQs.length && <QuietPlaceholder rows={4}/>}
             </div>
-          </div>
-        </div>
+          </HomeInsightSection>
 
-        {/* recently updated + activity */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:30, marginTop:54, alignItems:'start' }}>
-          <div>
-            <SectionHead title={window.t('recently_updated')} action={window.t('open_wiki')} onAction={goWiki} icon="wiki"/>
+          <HomeInsightSection title={window.t('recently_updated')} action={window.t('open_wiki')} onAction={goWiki} icon="wiki" compactAction>
             <div style={{ display:'flex', flexDirection:'column', gap:2, marginTop:18 }}>
-              {recentEntries.map(e=>{ const cat=LX.CAT_BY[e.category]; return (
+              {recentEntries.length ? recentEntries.map(e=>{ const cat=LX.CAT_BY[e.category]; return (
                 <button key={e.id} onClick={()=>onOpenEntry(e.id)} style={entryRowH}
                   onMouseEnter={ev=>ev.currentTarget.style.background='var(--card)'}
                   onMouseLeave={ev=>ev.currentTarget.style.background='transparent'}>
@@ -139,14 +136,13 @@ function Home({ data, litByMap, inbox, onOpenMap, onOpenEntry, onGotoMapNode, go
                   </span>
                   <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--ink-4)', flex:'none', marginTop:2 }}>{e.updatedShort}</span>
                 </button>
-              );})}
+              );}) : <QuietPlaceholder rows={4}/>}
             </div>
-          </div>
+          </HomeInsightSection>
 
-          <div>
-            <SectionHead title={window.t('how_grew')} icon="spark"/>
+          <HomeInsightSection title={window.t('how_grew')} icon="spark">
             <div style={{ display:'flex', flexDirection:'column', gap:15, marginTop:20 }}>
-              {ACTIVITY.map((a,i)=>{ const m=LX.MAP_BY[a.map]; return (
+              {ACTIVITY.length ? ACTIVITY.map((a,i)=>{ const m=LX.MAP_BY[a.map]; return (
                 <div key={i} style={{ display:'flex', gap:12 }}>
                   <div style={{ flex:'none', marginTop:2, color: a.kind==='light'?'var(--glow-amber)': a.kind==='link'?'var(--accent)': a.kind==='map'?hueColor(m?m.accentHue:'blue'):'var(--ink-4)' }}>
                     <Icon name={a.kind==='light'?'spark':a.kind==='link'?'connect':a.kind==='map'?'atlas':'plus'} s={15}/>
@@ -156,9 +152,9 @@ function Home({ data, litByMap, inbox, onOpenMap, onOpenEntry, onGotoMapNode, go
                     <div className="mono-label" style={{ marginTop:4, fontSize:9 }}>{a.t}{m?` · ${m.title}`:''}</div>
                   </div>
                 </div>
-              );})}
+              );}) : <QuietPlaceholder rows={5}/>}
             </div>
-          </div>
+          </HomeInsightSection>
         </div>
       </div>
     </div>
@@ -194,6 +190,28 @@ function SectionHead({ title, sub, action, onAction, icon, style }) {
   );
 }
 
+function HomeInsightSection({ title, sub, action, onAction, icon, compactAction=false, children }) {
+  const headStyle = compactAction ? { justifyContent:'flex-start', alignItems:'flex-start', gap:14 } : undefined;
+
+  return (
+    <section style={insightSection}>
+      <SectionHead title={title} sub={sub} action={action} onAction={onAction} icon={icon}
+        style={headStyle}/>
+      {children}
+    </section>
+  );
+}
+
+function QuietPlaceholder({ rows=3 }) {
+  return (
+    <div style={quietPlaceholder}>
+      {Array.from({ length:rows }).map((_,i)=>(
+        <span key={i} style={{ width:(i % 2 ? '72%' : '88%'), height:1, background:'var(--hair-soft)' }}/>
+      ))}
+    </div>
+  );
+}
+
 const inboxStrip = { display:'flex', alignItems:'center', gap:11, width:'fit-content', maxWidth:'100%', marginTop:20,
   padding:'8px 14px 8px 12px', borderRadius:11, border:'1px solid var(--hair-soft)', background:'transparent',
   transition:'background .15s', cursor:'pointer' };
@@ -208,6 +226,10 @@ const qRow = { display:'flex', gap:12, alignItems:'flex-start', textAlign:'left'
   padding:'11px 10px', borderRadius:11, transition:'background .15s', cursor:'pointer' };
 const entryRowH = { display:'flex', gap:11, alignItems:'flex-start', textAlign:'left', border:'none', background:'transparent',
   padding:'10px 10px', borderRadius:10, transition:'background .15s', cursor:'pointer' };
+const insightGrid = { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', columnGap:46, rowGap:42, marginTop:54, alignItems:'start' };
+const insightSection = { minWidth:0 };
+const quietPlaceholder = { minHeight:104, display:'flex', flexDirection:'column', justifyContent:'center', gap:15,
+  padding:'4px 10px', borderTop:'1px solid var(--hair-soft)', borderBottom:'1px solid var(--hair-soft)', opacity:0.75 };
 const sectionAction = { display:'inline-flex', alignItems:'center', gap:6, padding:'7px 13px', borderRadius:9,
   border:'1px solid var(--hair)', background:'var(--card)', color:'var(--ink-2)', fontSize:12.5, fontWeight:500, whiteSpace:'nowrap' };
 
