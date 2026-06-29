@@ -1,5 +1,5 @@
 /* ============================================================
-   LUMEN — app shell · Home · Atlas · Wiki · Sources
+   LUMEN — app shell · Overview · Map · Wiki · Sources
    ============================================================ */
 const { useState:useStateApp, useEffect:useEffectApp, useMemo:useMemoApp } = React;
 
@@ -21,25 +21,49 @@ const PALETTES = [
 const ACCENTS = ["#4f6fad","#3f8f86","#b07840","#9a6bb0"];
 
 const NAV = [
-  { id:'home',    icon:'home',    key:'nav_home' },
-  { id:'atlas',   icon:'atlas',   key:'nav_atlas' },
   { id:'wiki',    icon:'wiki',    key:'nav_wiki' },
+  { id:'atlas',   icon:'atlas',   key:'nav_atlas' },
   { id:'sources', icon:'library', key:'nav_sources' },
 ];
 
+const SOURCE_FIRST_BRANCH = {
+  id:'source-first',
+  label:window.LANG === 'zh' ? '问题' : 'Questions',
+  note:window.LANG === 'zh' ? '以来源优先的研究页面' : 'Source-first research pages',
+};
+const SOURCE_FIRST_CATEGORY = {
+  id:'questions',
+  branch:'source-first',
+  label:window.LANG === 'zh' ? '开放问题' : 'Open questions',
+  note:window.LANG === 'zh' ? '等待来源与图谱覆盖检查的问题' : 'Questions waiting for sources and map coverage checks',
+  hue:'coral',
+};
+
 function App() {
-  const onboardingMode = new URLSearchParams(window.location.search).has('onboarding') || new URLSearchParams(window.location.search).has('demo');
+  const params = new URLSearchParams(window.location.search);
+  const onboardingMode = params.has('onboarding') || params.has('demo') || params.has('seed');
+  const seedOnlyMode = params.has('seed');
   const baseData = window.LUMEN_BASE_DATA || (window.LUMEN_BASE_DATA = onboardingMode && window.LUMEN_ONBOARDING_DATA ? window.LUMEN_ONBOARDING_DATA : window.LUMEN_DATA);
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const requestedView = params.get('view');
+  const initialView = NAV.some(item=>item.id===requestedView) || requestedView === 'overview' || requestedView === 'settings'
+    ? requestedView
+    : 'wiki';
+  const initialMapId = params.get('map') || (baseData.MAPS[0] ? baseData.MAPS[0].id : null);
+  const initialNodeId = params.get('node') || null;
+  const initialCat = params.get('cat') || null;
+  const initialEntryId = params.get('entry') || (baseData.ENTRIES[0] ? baseData.ENTRIES[0].id : null);
+  const initialSourceId = params.get('source') || (baseData.SOURCES[0] ? baseData.SOURCES[0].id : null);
 
-  const [view, setView] = useStateApp('home');
+  const [view, setView] = useStateApp(initialView);
   const [extraMaps, setExtraMaps] = useStateApp([]);
+  const [extraEntries, setExtraEntries] = useStateApp([]);
   const [dynamicSources, setDynamicSources] = useStateApp([]);
-  const [activeMapId, setActiveMapId] = useStateApp(baseData.MAPS[0] ? baseData.MAPS[0].id : null);
-  const [mapSelected, setMapSelected] = useStateApp(null);
-  const [activeEntryId, setActiveEntryId] = useStateApp(baseData.ENTRIES[0] ? baseData.ENTRIES[0].id : null);
-  const [browseCat, setBrowseCat] = useStateApp(null);
-  const [selectedSourceId, setSelectedSourceId] = useStateApp(baseData.SOURCES[0] ? baseData.SOURCES[0].id : null);
+  const [activeMapId, setActiveMapId] = useStateApp(initialMapId);
+  const [mapSelected, setMapSelected] = useStateApp(initialNodeId);
+  const [activeEntryId, setActiveEntryId] = useStateApp(initialCat ? null : initialEntryId);
+  const [browseCat, setBrowseCat] = useStateApp(initialCat);
+  const [selectedSourceId, setSelectedSourceId] = useStateApp(initialSourceId);
   const [litByMap, setLitByMap] = useStateApp({});
   const [add, setAdd] = useStateApp(null);          // null | { mapId, preset }
   const [creating, setCreating] = useStateApp(false);
@@ -53,6 +77,13 @@ function App() {
     const state = payload && payload.state ? payload.state : payload;
     if(!state) return;
     if(Array.isArray(state.extraMaps)) setExtraMaps(state.extraMaps);
+    if(Array.isArray(state.extraEntries)) {
+      setExtraEntries(state.extraEntries);
+      if(!activeEntryId && state.extraEntries[0]) {
+        setActiveEntryId(state.extraEntries[0].id);
+        setBrowseCat(null);
+      }
+    }
     if(Array.isArray(state.sources)) setDynamicSources(state.sources);
     if(Array.isArray(state.inbox)) setInbox(state.inbox);
     if(state.litByMap && typeof state.litByMap === 'object') setLitByMap(state.litByMap);
@@ -84,6 +115,48 @@ function App() {
         .filter((p,i,arr)=>arr.findIndex(x=>x.id===p.id)===i)
         .slice(0, 120);
     });
+  };
+
+  const mergeById = (items)=>{
+    const byId = new Map();
+    (items || []).forEach(item=>{ if(item && item.id) byId.set(item.id, item); });
+    return Array.from(byId.values());
+  };
+
+  const snapshotForPatchEntry = (entryId)=>{
+    if(!entryId || !window.LX) return null;
+    const direct = window.LX.ENTRY_BY && window.LX.ENTRY_BY[entryId];
+    if(direct && !direct._stub) return direct;
+    const raw = String(entryId);
+    if(raw.startsWith('entry-')){
+      const nodeId = raw.slice(6);
+      const entry = Object.values(window.LX.ENTRY_BY || {}).find(e=>(e.mapRefs||[]).some(ref=>ref.node===nodeId));
+      if(entry) return entry;
+    }
+    return direct || null;
+  };
+
+  const entrySnapshotsForResult = (result)=>{
+    const snapshots = {};
+    ((result && result.wikiPatches) || []).forEach(patch=>{
+      const entry = snapshotForPatchEntry(patch.entryId);
+      if(entry) snapshots[patch.entryId] = {
+        id:entry.id,
+        type:entry.type,
+        title:entry.title,
+        subtitle:entry.subtitle,
+        category:entry.category,
+        mapRefs:entry.mapRefs || [],
+        updated:entry.updated,
+        updatedShort:entry.updatedShort,
+        sourceNs:entry.sourceNs || [],
+        sourceIds:entry.sourceIds || [],
+        backlinks:entry.backlinks || [],
+        lead:entry.lead || [],
+        sections:entry.sections || [],
+      };
+    });
+    return snapshots;
   };
 
   const rememberWikiProposal = ({ result, source, mapId, boosts })=>{
@@ -120,6 +193,7 @@ function App() {
 
   useEffectApp(()=>{
     let cancelled = false;
+    if(seedOnlyMode) return undefined;
     if(!window.LumenApi) return undefined;
     window.LumenApi.getWorkspace()
       .then(payload=>{ if(!cancelled) applyWorkspaceState(payload); })
@@ -134,11 +208,17 @@ function App() {
 
   const maps = useMemoApp(()=>[...baseData.MAPS, ...extraMaps], [baseData.MAPS, extraMaps]);
   const data = useMemoApp(()=>{
-    const next = { ...baseData, MAPS:maps, SOURCES:[...baseData.SOURCES, ...dynamicSources], INBOX:inbox };
+    const entries = mergeById([...baseData.ENTRIES, ...extraEntries]);
+    const needsQuestionShelf = entries.some(e=>e.category==='questions') || maps.length > baseData.MAPS.length;
+    const branches = [...(baseData.BRANCHES || [])];
+    const categories = [...(baseData.CATEGORIES || [])];
+    if(needsQuestionShelf && !branches.some(b=>b.id===SOURCE_FIRST_BRANCH.id)) branches.unshift(SOURCE_FIRST_BRANCH);
+    if(needsQuestionShelf && !categories.some(c=>c.id===SOURCE_FIRST_CATEGORY.id)) categories.unshift(SOURCE_FIRST_CATEGORY);
+    const next = { ...baseData, MAPS:maps, BRANCHES:branches, CATEGORIES:categories, ENTRIES:entries, SOURCES:[...baseData.SOURCES, ...dynamicSources], INBOX:inbox };
     window.LUMEN_DATA = next;
     if(window.LumenBuildHelpers) window.LumenBuildHelpers(next);
     return next;
-  }, [baseData, maps, dynamicSources, inbox]);
+  }, [baseData, maps, extraEntries, dynamicSources, inbox]);
   const activeMap = maps.find(m=>m.id===activeMapId) || maps[0] || null;
 
   // apply tweak vars to :root
@@ -171,10 +251,12 @@ function App() {
   };
   const goWiki = ()=>{ setView('wiki'); };
   const openSource = (id)=>{ setSelectedSourceId(id); setView('sources'); };
-  const askAddSource = (nodeId)=>{
-    const mapId = activeMapId || (maps[0] && maps[0].id);
+  const askAddSource = (nodeId, options={})=>{
+    const mapId = options.targetMapId || activeMapId || (maps[0] && maps[0].id);
     if(!mapId){ setCreating(true); return; }
-    setAdd({ mapId, preset:nodeId||null });
+    const preset = options.presetNode || nodeId || null;
+    const entryId = options.targetEntryId || (preset && window.LX && window.LX.entryIdForNode ? window.LX.entryIdForNode(mapId, preset) : null);
+    setAdd({ mapId, preset, targetEntryId:entryId });
   };
 
   /* ---- quick capture → Inbox (separate from the formal Add Source flow) ---- */
@@ -226,7 +308,7 @@ function App() {
     const first = Object.keys(appliedBoosts)[0];
     const targetEntry = meta && meta.compileResult && meta.compileResult.wikiPatches && meta.compileResult.wikiPatches[0]
       ? meta.compileResult.wikiPatches[0].entryId
-      : (first && window.LX && window.LX.entryIdForNode ? window.LX.entryIdForNode(mid, first) : activeEntryId);
+      : (meta && meta.targetEntryId) || (first && window.LX && window.LX.entryIdForNode ? window.LX.entryIdForNode(mid, first) : activeEntryId);
     const finishApply = ()=>{
       setAdd(null);
       setActiveMapId(mid);
@@ -246,6 +328,7 @@ function App() {
         result: meta.compileResult,
         source: meta.source,
         destination: meta.destination,
+        entrySnapshots: entrySnapshotsForResult(meta.compileResult),
       })
         .then(payload=>{
           applyWorkspaceState(payload);
@@ -281,6 +364,7 @@ function App() {
       result: proposal.result,
       source: { id:proposal.sourceId, title:proposal.sourceTitle },
       destination:'wiki',
+      entrySnapshots: entrySnapshotsForResult(proposal.result),
     })
       .then(payload=>{
         applyWorkspaceState(payload);
@@ -296,10 +380,18 @@ function App() {
   };
 
   const createMap = (question)=>{
-    const useMap = (m)=>{
+    const useMap = (m, entry)=>{
       setExtraMaps(prev=> prev.some(x=>x.id===m.id) ? prev : [...prev, m]);
+      if(entry) setExtraEntries(prev=> prev.some(x=>x.id===entry.id) ? prev : [entry, ...prev]);
       setCreating(false);
-      setActiveMapId(m.id); setMapSelected(null); setView('atlas');
+      setActiveMapId(m.id); setMapSelected(null);
+      if(entry){
+        setActiveEntryId(entry.id);
+        setBrowseCat(null);
+        setView('wiki');
+      } else {
+        setView('atlas');
+      }
     };
     if(!window.LumenApi) return Promise.reject(new Error('Lumen backend is required to create a map with AI.'));
     return window.LumenApi.createMap(question)
@@ -308,7 +400,7 @@ function App() {
         if(!map || !Array.isArray(map.nodes) || map.nodes.length < 7 || !map.seedMeta || map.seedMeta.generatedBy !== 'mapSeeder'){
           throw new Error('Map API returned an invalid AI seed. No local placeholder map was accepted.');
         }
-        applyWorkspaceState(payload); useMap(map); return map;
+        applyWorkspaceState(payload); useMap(map, payload.entry); return map;
       });
   };
 
@@ -371,7 +463,7 @@ function App() {
         .catch(err=>window.alert((err && err.message) || 'Delete map failed'));
       return;
     }
-    finishLocal({ state:{ extraMaps:extraMaps.filter(m=>m.id!==mapId), sources:dynamicSources, inbox, litByMap } });
+      finishLocal({ state:{ extraMaps:extraMaps.filter(m=>m.id!==mapId), extraEntries:extraEntries.filter(e=>!(e.mapRefs||[]).some(r=>r.map===mapId)), sources:dynamicSources, inbox, litByMap } });
   };
 
   return (
@@ -380,7 +472,7 @@ function App() {
 
       {/* NAV */}
       <nav style={navBar}>
-        <button onClick={()=>setView('home')} style={brandBtt}>
+        <button onClick={goWiki} style={brandBtt}>
           <HorizonMark s={24}/>
           <span style={{ fontFamily:'var(--serif)', fontSize:25, lineHeight:1, letterSpacing:'0.01em', color:'var(--ink)', transform:'translateY(1px)' }}>Lumen</span>
         </button>
@@ -413,6 +505,13 @@ function App() {
                 onPick={(typeId)=>{ setCaptureOpen(false); setCaptureType(typeId); }} />
             )}
           </div>
+          <button onClick={()=>setView('overview')} title={window.t('overview')} style={{ width:38, height:38, borderRadius:11, flex:'none',
+            border:'1px solid '+(view==='overview'?'transparent':'var(--hair)'),
+            background: view==='overview'?'var(--card-solid)':'var(--card)',
+            boxShadow: view==='overview'?'0 1px 3px oklch(0.3 0.04 280 / 0.12), 0 0 0 1px var(--hair)':'none',
+            color: view==='overview'?'var(--ink)':'var(--ink-3)', display:'grid', placeItems:'center' }}>
+            <Icon name="home" s={17}/>
+          </button>
           <button onClick={()=>setView('settings')} title={window.t('settings')} style={{ width:38, height:38, borderRadius:11, flex:'none',
             border:'1px solid '+(view==='settings'?'transparent':'var(--hair)'),
             background: view==='settings'?'var(--card-solid)':'var(--card)',
@@ -425,7 +524,7 @@ function App() {
 
       {/* VIEW */}
       <div style={{ flex:1, position:'relative', minHeight:0 }}>
-        {view==='home' && (
+        {view==='overview' && (
           <Home data={data} litByMap={litByMap} inbox={inbox}
             onOpenMap={openMap} onOpenEntry={openEntry} onGotoMapNode={gotoMapNode}
             goAtlas={()=>setView('atlas')} goWiki={goWiki} goSources={()=>setView('sources')}
@@ -445,7 +544,7 @@ function App() {
             activeEntryId={activeEntryId} setActiveEntryId={setActiveEntryId}
             browseCat={browseCat} setBrowseCat={setBrowseCat}
             onGotoMapNode={gotoMapNode}
-            onAddSource={askAddSource} onOpenSource={openSource}
+            onAddSource={askAddSource} onOpenSource={openSource} onCreateMap={()=>setCreating(true)}
             wikiProposals={wikiProposals}
             onApplyWikiProposal={applyWikiProposal}
             onDismissWikiProposal={dismissWikiProposal} />
@@ -462,7 +561,7 @@ function App() {
         )}
       </div>
 
-      {add && <AddSource map={maps.find(m=>m.id===add.mapId)||activeMap} presetNode={add.preset} onClose={()=>setAdd(null)} onApply={applySource} onProposal={rememberWikiProposal} />}
+      {add && <AddSource map={maps.find(m=>m.id===add.mapId)||activeMap} presetNode={add.preset} targetEntryId={add.targetEntryId} onClose={()=>setAdd(null)} onApply={applySource} onProposal={rememberWikiProposal} />}
       {creating && <CreateMap onClose={()=>setCreating(false)} onCreate={createMap} />}
       {captureType && <QuickCapture typeId={captureType} onClose={()=>setCaptureType(null)} onSave={captureToInbox} onReview={()=>{ setCaptureType(null); goReviewInbox(); }} />}
 

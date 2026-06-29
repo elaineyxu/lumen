@@ -340,10 +340,10 @@ function ExpertMap({ map, litMap, lineStyle, onOpenEntry, onAddSource, onReviseM
                   {window.t('drawn_from_pre')}<strong style={{ fontWeight:600, color:'var(--ink)' }}>{selNode.sources}</strong> {window.t('drawn_from', selNode.sources)}
                 </div>
                 <div style={{ display:'flex', gap:8, marginTop:16 }}>
-                  <button onClick={()=> lit && onOpenEntry(eid)} disabled={!lit}
-                    title={lit?'Open this concept in your Wiki':'Add a source to illuminate this concept'}
-                    style={lit?btnPrimary:btnPrimaryDim}>
-                    {lit ? <>{window.t('open_in_wiki')} <Icon name="arrow" s={14}/></> : <>{window.t('unlit_add')}</>}
+                  <button onClick={()=>onOpenEntry(eid)}
+                    title={lit?window.t('open_in_wiki'):window.t('open_wiki_gap')}
+                    style={btnPrimary}>
+                    {lit ? <>{window.t('open_in_wiki')} <Icon name="arrow" s={14}/></> : <>{window.t('open_wiki_gap')}</>}
                   </button>
                   <button onClick={()=>onAddSource(selNode.id)} style={btnGhost}>
                     <Icon name="plus" s={14}/> {window.t('source_btn')}

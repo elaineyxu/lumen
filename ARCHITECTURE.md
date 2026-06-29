@@ -6,7 +6,13 @@ The MVP keeps the original Lumen HTML prototype as the product shell and moves t
 
 1. Source Intake
    - Uses the original Add Source modal and source type picker.
-   - Accepts PDF-shaped text, pasted webpages, notes, and AI conversation records.
+   - Accepts every picker type: links/webpages, PDFs, Word `.docx`, images, audio/voice, video, chat transcripts, and notes.
+   - `server/workflow/ingestion.js` normalizes each type into plain text before the pipeline runs:
+     - URL/link → fetch + HTML readability extraction (also handles PDF/DOCX/audio URLs).
+     - PDF → embedded text extraction; DOCX → dependency-free ZIP + `word/document.xml` parse.
+     - Image → vision OCR stage (`imageOcr`) producing OCR text + visual summary.
+     - Audio/voice → OpenAI Whisper transcription stage (`audioTranscription`); user-pasted transcript is merged/fallback.
+     - Note/chat → direct text and role-labelled message flattening.
 
 2. Workflow Adapter
    - `LumenWorkflow.compileSource(source, config)` is the browser boundary.

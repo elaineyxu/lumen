@@ -15,6 +15,8 @@
     stages: {
       sourceParser: { mode:'auto', preset:'economy', model:'auto' },
       chunking: { mode:'auto', preset:'economy', model:'auto' },
+      imageOcr: { mode:'auto', preset:'economy', model:'auto' },
+      audioTranscription: { mode:'auto', preset:'economy', model:'auto' },
       extraction: { mode:'auto', preset:'balanced', model:'auto' },
       wiki: { mode:'auto', preset:'balanced', model:'auto' },
       knowledgeGraph: { mode:'auto', preset:'balanced', model:'auto' },
@@ -103,12 +105,12 @@
     return n ? n.label : id;
   }
 
-  function mockCompile(source, map, boosts) {
+  function mockCompile(source, map, boosts, targetEntryId) {
     const litIds = Object.keys(boosts || {});
     const primary = litIds[0] || ((map.nodes || [])[0] && map.nodes[0].id) || 'unknown';
     const secondary = litIds[1] || primary;
     const third = litIds[2] || secondary;
-    const targetEntryId = 'entry-' + primary;
+    const target = targetEntryId || ('entry-' + primary);
 
     return {
       schemaVersion: SCHEMA_VERSION,
@@ -119,14 +121,14 @@
           text: '这条来源强化了「' + nodeLabel(map, primary) + '」在当前问题中的重要性。',
           confidence: 'high',
           citationIds: ['cite-1'],
-          targetEntryId,
+          targetEntryId: target,
         },
         {
           id: 'claim-' + Date.now() + '-2',
           text: '它同时把「' + nodeLabel(map, secondary) + '」与可回溯证据连接起来，因此适合先进入审阅队列。',
           confidence: 'medium',
           citationIds: ['cite-2'],
-          targetEntryId,
+          targetEntryId: target,
         },
       ],
       concepts: litIds.map((id) => ({
@@ -137,7 +139,7 @@
       })),
       wikiPatches: [
         {
-          entryId: targetEntryId,
+          entryId: target,
           operation: 'append_section',
           heading: '新来源带来的判断更新',
           body: '这条来源不是被保存为孤立摘要，而是被拆解为 claim、citation、concept 与 map update。用户审阅后，它会点亮理解地图，并扩充相关 Wiki 词条。',
@@ -152,7 +154,7 @@
         {
           id: 'oq-' + Date.now(),
           text: '这条来源是否足以改变当前词条的立场，还是只应作为一个待验证证据？',
-          targetEntryId,
+          targetEntryId: target,
         },
       ],
       citations: [
@@ -172,10 +174,10 @@
     };
   }
 
-  async function compileSource({ source, map, boosts }) {
+  async function compileSource({ source, map, boosts, targetEntryId }) {
     const config = readConfig();
     if (config.mode === 'mock') {
-      return mockCompile(source, map, boosts);
+      return mockCompile(source, map, boosts, targetEntryId);
     }
 
     if (config.mode === 'backend' || config.mode === 'workflow') {
@@ -188,6 +190,8 @@
             source,
             map,
             boosts,
+            targetEntryId,
+            locale: (window.LANG === 'en' ? 'en' : 'zh'),
           }),
         });
         if (!response.ok) throw new Error('Backend compile failed: HTTP ' + response.status);
@@ -200,11 +204,11 @@
         return result;
       } catch (error) {
         if (window.location.protocol !== 'file:') throw error;
-        return mockCompile(source, map, boosts);
+        return mockCompile(source, map, boosts, targetEntryId);
       }
     }
 
-    return mockCompile(source, map, boosts);
+    return mockCompile(source, map, boosts, targetEntryId);
   }
 
   const adapter = {

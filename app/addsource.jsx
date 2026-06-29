@@ -13,7 +13,7 @@ const SRC_TYPES = [
   { type:'note',  label:window.t('t_note'),  tint:'blue',   ph:window.t('tph_note'), area:true },
 ];
 
-function AddSource({ map, presetNode, onClose, onApply, onProposal }) {
+function AddSource({ map, presetNode, targetEntryId, onClose, onApply, onProposal }) {
   const NODES = map.nodes;
   const byId = Object.fromEntries(NODES.map(n=>[n.id,n]));
   const [step, setStep] = useStateA('choose');   // choose | input | compiling | done
@@ -23,8 +23,67 @@ function AddSource({ map, presetNode, onClose, onApply, onProposal }) {
   const [compileResult, setCompileResult] = useStateA(null);
   const [compileError, setCompileError] = useStateA(null);
   const [compiledSource, setCompiledSource] = useStateA(null);
+  const [filePayload, setFilePayload] = useStateA(null);
+  const [fileError, setFileError] = useStateA('');
+  const fileInputRef = useRefA(null);
 
   const COMPILE = [window.t('comp_read'), window.t('comp_extract'), window.t('comp_link'), window.t('comp_weave')];
+  const urlRe = /^https?:\/\/[^\s<>"']+$/i;
+  const fileAccept = sel && sel.type === 'paper' ? '.pdf,.txt,.md,.html,.htm,.doc,.docx,application/pdf,text/*'
+    : sel && sel.type === 'image' ? 'image/*'
+    : sel && sel.type === 'voice' ? 'audio/*,.m4a,.mp3,.wav,.webm'
+    : '*/*';
+
+  const readFile = (file)=>new Promise((resolve, reject)=>{
+    if(!file) return resolve(null);
+    if(file.size > 8_000_000) return reject(new Error('文件超过 8MB，请先粘贴正文、摘要或使用更小的文件。'));
+    const textLike = /^text\//.test(file.type) || /(\.txt|\.md|\.markdown|\.html|\.htm|\.json|\.csv|\.xml)$/i.test(file.name);
+    const reader = new FileReader();
+    reader.onerror = ()=>reject(new Error('读取文件失败'));
+    reader.onload = ()=>resolve({
+      name:file.name,
+      mimeType:file.type || 'application/octet-stream',
+      size:file.size,
+      text:textLike ? String(reader.result || '') : '',
+      dataUrl:textLike ? '' : String(reader.result || ''),
+    });
+    if(textLike) reader.readAsText(file);
+    else reader.readAsDataURL(file);
+  });
+
+  const pickFile = (file)=>{
+    setFileError('');
+    readFile(file)
+      .then(payload=>setFilePayload(payload))
+      .catch(err=>{ setFilePayload(null); setFileError(err && err.message ? err.message : String(err)); });
+  };
+
+  const sourceFromInput = ()=>{
+    const raw = (val||'').trim();
+    const firstLine = raw.split('\n')[0];
+    const url = urlRe.test(raw) ? raw : '';
+    const fileTitle = filePayload && filePayload.name;
+    const title = fileTitle || firstLine || (sel ? sel.label : 'New source');
+    const source = {
+      id:'source-'+Date.now(),
+      type:sel ? sel.type : 'note',
+      title,
+      text:url ? '' : raw,
+      url,
+    };
+    if(sel && (sel.type === 'chat' || sel.type === 'note')) source.text = raw;
+    if(sel && sel.type === 'voice' && raw) source.transcript = raw;
+    if(sel && sel.type === 'image' && raw) source.description = raw;
+    if(filePayload) {
+      source.file = {
+        ...filePayload,
+        description: sel && sel.type === 'image' ? raw : '',
+        transcript: sel && sel.type === 'voice' ? raw : '',
+        ocrText: sel && sel.type === 'image' ? raw : '',
+      };
+    }
+    return source;
+  };
 
   useEffectA(()=>{
     if(step!=='compiling') return;
@@ -35,14 +94,9 @@ function AddSource({ map, presetNode, onClose, onApply, onProposal }) {
     let cancelled=false;
     let i=0;
     const t=setInterval(()=>{ i=Math.min(i+1, COMPILE.length-1); setProgress(i); }, 620);
-    const source = {
-      id:'source-'+Date.now(),
-      type:sel ? sel.type : 'note',
-      title:(val||'').trim().split('\n')[0] || (sel ? sel.label : 'New source'),
-      text:(val||'').trim() || (sel && sel.sample) || '',
-    };
+    const source = sourceFromInput();
     setCompiledSource(source);
-    window.LumenWorkflow.compileSource({ source, map, boosts })
+    window.LumenWorkflow.compileSource({ source, map, boosts, targetEntryId })
       .then(result=>{
         if(cancelled) return;
         clearInterval(t);
@@ -83,7 +137,7 @@ function AddSource({ map, presetNode, onClose, onApply, onProposal }) {
   const reviewer = compileResult && compileResult.feedback;
   const reviewRejected = reviewer && reviewer.recommendation === 'reject';
 
-  const finish = (destination)=>{ onApply(boosts, { type:sel.type, claims, lit:litIds, compileResult, source:compiledSource, destination }); };
+  const finish = (destination)=>{ onApply(boosts, { type:sel.type, claims, lit:litIds, compileResult, source:compiledSource, destination, targetEntryId }); };
 
   return (
     <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:120, display:'grid', placeItems:'center',
@@ -102,7 +156,7 @@ function AddSource({ map, presetNode, onClose, onApply, onProposal }) {
             <p style={modalSub}>{window.t('addsrc_sub')}</p>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:18 }}>
               {SRC_TYPES.map(t=>(
-                <button key={t.type} onClick={()=>{ setSel(t); setVal(t.sample||''); setStep('input'); }}
+                <button key={t.type} onClick={()=>{ setSel(t); setVal(t.sample||''); setFilePayload(null); setFileError(''); setStep('input'); }}
                   style={{ ...typeCard }}
                   onMouseEnter={e=>e.currentTarget.style.borderColor='var(--ink-4)'}
                   onMouseLeave={e=>e.currentTarget.style.borderColor='var(--hair)'}>
@@ -130,12 +184,24 @@ function AddSource({ map, presetNode, onClose, onApply, onProposal }) {
             </div>
 
             {sel.drop ? (
-              <div style={dropZone}>
+              <>
+              <div style={dropZone}
+                onClick={()=>fileInputRef.current&&fileInputRef.current.click()}
+                onDragOver={e=>{ e.preventDefault(); e.currentTarget.style.borderColor='var(--accent)'; }}
+                onDragLeave={e=>{ e.currentTarget.style.borderColor='var(--ink-4)'; }}
+                onDrop={e=>{ e.preventDefault(); e.currentTarget.style.borderColor='var(--ink-4)'; pickFile(e.dataTransfer.files && e.dataTransfer.files[0]); }}>
+                <input ref={fileInputRef} type="file" accept={fileAccept} style={{ display:'none' }}
+                  onChange={e=>pickFile(e.target.files && e.target.files[0])}/>
                 <Icon name={sel.mic?'voice':sel.type} s={26} c="var(--ink-4)"/>
-                <div style={{ fontSize:14, color:'var(--ink-2)', marginTop:10 }}>{sel.ph}</div>
-                <div className="mono-label" style={{ marginTop:6 }}>{sel.mic?window.t('addsrc_drop_mic'):window.t('addsrc_drop_file')}</div>
+                <div style={{ fontSize:14, color:'var(--ink-2)', marginTop:10 }}>{filePayload ? filePayload.name : sel.ph}</div>
+                <div className="mono-label" style={{ marginTop:6 }}>{filePayload ? Math.round((filePayload.size||0)/1024)+' KB loaded' : (sel.mic?window.t('addsrc_drop_mic'):window.t('addsrc_drop_file'))}</div>
                 {sel.sample && <div style={{ marginTop:14, fontSize:12.5, color:'var(--ink-3)', fontStyle:'italic', fontFamily:'var(--serif)' }}>{window.t('example_pre')}{sel.sample}</div>}
               </div>
+              {fileError && <div style={{ marginTop:10, fontSize:12.5, color:'var(--glow-coral)', lineHeight:1.45 }}>{fileError}</div>}
+              <textarea value={val} onChange={e=>setVal(e.target.value)}
+                placeholder={sel.type==='image'?'可选：粘贴 OCR 文本、图片说明，或让文件元数据先入库':sel.type==='voice'?'可选：粘贴转录文本；音频文件会作为来源附件入库':sel.ph}
+                style={{ ...inputBase, minHeight:86, resize:'vertical' }}/>
+              </>
             ) : sel.area ? (
               <textarea value={val} onChange={e=>setVal(e.target.value)} placeholder={sel.ph} style={{ ...inputBase, minHeight:120, resize:'vertical' }}/>
             ) : (
@@ -178,7 +244,7 @@ function AddSource({ map, presetNode, onClose, onApply, onProposal }) {
             </div>
             <h2 style={{ ...modalTitle, marginTop:14, textAlign:'center' }}>{window.t('woven_in')}</h2>
             <p style={{ ...modalSub, textAlign:'center' }}>
-              {compileError ? 'Lumen 工作流暂时不可用；请先配置 API 或稍后重试。' : (compileResult ? compileResult.sourceSummary : window.t('understanding_grew'))}
+              {compileError ? window.t('done_unavailable') : (compileResult ? compileResult.sourceSummary : window.t('understanding_grew'))}
             </p>
             {compileError && (
               <div style={{ margin:'14px auto 0', maxWidth:440, padding:'10px 12px', borderRadius:12,
@@ -187,122 +253,58 @@ function AddSource({ map, presetNode, onClose, onApply, onProposal }) {
                 {compileError}
               </div>
             )}
-            <div style={{ display:'flex', justifyContent:'center', gap:10, marginTop:18, flexWrap:'wrap' }}>
-              <Stat n={claims} label={window.t('new_claims')} />
-              <Stat n={compileResult && compileResult.mapUpdates ? compileResult.mapUpdates.length : litIds.length} label={window.t('nodes_brightened')} />
-              {compileResult && compileResult.relations && compileResult.relations.length>0 && <Stat n={compileResult.relations.length} label="relations" />}
-              <Stat n={compileResult && compileResult.wikiPatches ? compileResult.wikiPatches.length : 1} label="wiki proposals" />
-            </div>
-            {reviewer && (
-              <div style={{ marginTop:18, textAlign:'left', padding:'14px 14px', borderRadius:13,
+
+            {/* compact stats — the numbers users scan */}
+            {!compileError && (
+              <div style={{ display:'flex', justifyContent:'center', gap:10, marginTop:18, flexWrap:'wrap' }}>
+                <Stat n={claims} label={window.t('new_claims')} />
+                <Stat n={compileResult && compileResult.mapUpdates ? compileResult.mapUpdates.length : litIds.length} label={window.t('nodes_brightened')} />
+                <Stat n={compileResult && compileResult.wikiPatches ? compileResult.wikiPatches.length : 1} label={window.t('done_wiki_props')} />
+              </div>
+            )}
+
+            {/* reviewer — one-line verdict; only surface risk flags, and only when they block apply */}
+            {reviewer && reviewer.summary && (
+              <div style={{ marginTop:16, textAlign:'left', padding:'12px 13px', borderRadius:12,
                 border:'1px solid var(--hair-soft)', background:'var(--card)' }}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
-                  <div className="mono-label">AI reviewer</div>
-                  <span style={{ padding:'4px 8px', borderRadius:999, border:'1px solid var(--hair)',
-                    fontSize:11, color:reviewRejected?'var(--glow-coral)':'var(--ink-2)' }}>
+                  <div className="mono-label">{window.t('done_reviewer')}</div>
+                  <span style={{ padding:'3px 8px', borderRadius:999, border:'1px solid var(--hair)',
+                    fontSize:11, color:reviewRejected?'var(--glow-coral)':'var(--ink-3)' }}>
                     {reviewer.recommendation || 'review'}
                   </span>
                 </div>
-                {reviewer.summary && <div style={{ marginTop:8, fontFamily:'var(--serif)', fontSize:16, lineHeight:1.42, color:'var(--ink)' }}>{reviewer.summary}</div>}
-                {(reviewer.reviewNotes||[]).length>0 && (
-                  <div style={{ marginTop:10, display:'grid', gap:6 }}>
-                    {(reviewer.reviewNotes||[]).slice(0,3).map((item,i)=>(
-                      <div key={'note-'+i} style={{ display:'flex', gap:8, alignItems:'flex-start', fontSize:12.5, color:'var(--ink-2)', lineHeight:1.45 }}>
-                        <Icon name="spark" s={13} c="var(--ink-4)"/><span>{item}</span>
+                <div style={{ marginTop:7, fontSize:13.5, lineHeight:1.45, color:'var(--ink-2)' }}>{reviewer.summary}</div>
+                {reviewRejected && (reviewer.riskFlags||[]).length>0 && (
+                  <div style={{ marginTop:9, display:'grid', gap:5 }}>
+                    {(reviewer.riskFlags||[]).slice(0,2).map((risk,i)=>(
+                      <div key={'risk-'+i} style={{ display:'flex', gap:7, alignItems:'flex-start', fontSize:12.5, color:'var(--ink-2)', lineHeight:1.45 }}>
+                        <Icon name="spark" s={12} c="var(--glow-coral)"/><span>{risk}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
-                {(reviewer.wikiReview || reviewer.mapReview) && (
-                  <div style={{ marginTop:10, display:'grid', gap:7 }}>
-                    {reviewer.wikiReview && <div style={{ padding:'9px 10px', borderRadius:10, background:'var(--card-solid)', fontSize:12.5, color:'var(--ink-2)', lineHeight:1.45 }}><b>Wiki</b> · {reviewer.wikiReview}</div>}
-                    {reviewer.mapReview && <div style={{ padding:'9px 10px', borderRadius:10, background:'var(--card-solid)', fontSize:12.5, color:'var(--ink-2)', lineHeight:1.45 }}><b>Map</b> · {reviewer.mapReview}</div>}
-                  </div>
-                )}
-                {(reviewer.checklist||[]).length>0 && (
-                  <div style={{ marginTop:10, display:'grid', gap:6 }}>
-                    {(reviewer.checklist||[]).slice(0,4).map((item,i)=>(
-                      <div key={'check-'+i} style={{ display:'flex', gap:8, alignItems:'flex-start', fontSize:12.5, color:'var(--ink-2)', lineHeight:1.45 }}>
-                        <Icon name="check" s={13} c="var(--accent)"/><span>{item}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {(reviewer.nextActions||[]).length>0 && (
-                  <div style={{ marginTop:10, display:'grid', gap:5 }}>
-                    {(reviewer.nextActions||[]).slice(0,3).map((action,i)=>(
-                      <div key={'action-'+i} style={{ fontSize:12.5, color:'var(--ink-3)', lineHeight:1.45 }}>Next · {action}</div>
-                    ))}
-                  </div>
-                )}
-                {(reviewer.riskFlags||[]).length>0 && (
-                  <div style={{ marginTop:10, padding:'9px 10px', borderRadius:10,
-                    border:'1px solid color-mix(in oklab, var(--glow-amber) 35%, var(--hair))',
-                    background:'color-mix(in oklab, var(--glow-amber) 10%, transparent)' }}>
-                    {(reviewer.riskFlags||[]).slice(0,3).map((risk,i)=>(
-                      <div key={'risk-'+i} style={{ fontSize:12.5, color:'var(--ink-2)', lineHeight:1.45 }}>{risk}</div>
                     ))}
                   </div>
                 )}
               </div>
             )}
-            {compileResult && compileResult.claims && compileResult.claims.length>0 && (
-              <div style={{ marginTop:18, textAlign:'left', display:'flex', flexDirection:'column', gap:9 }}>
-                <div className="mono-label" style={{ textAlign:'center' }}>Evidence claims</div>
-                {compileResult.claims.slice(0,3).map((c,i)=>{
-                  const cite = (compileResult.citations||[]).find(x=>(c.citationIds||[]).includes(x.id));
-                  return (
-                    <div key={c.id||i} style={{ padding:'12px 13px', borderRadius:13, border:'1px solid var(--hair-soft)', background:'var(--card)' }}>
-                      <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:6 }}>
-                        <span className="mono-label">{c.claimType || 'claim'}</span>
-                        <span className="mono-label" style={{ color:'var(--ink-4)' }}>{c.stance || c.confidence}</span>
-                      </div>
-                      <div style={{ fontFamily:'var(--serif)', fontSize:16, lineHeight:1.38, color:'var(--ink)' }}>{c.text}</div>
-                      {cite && <div style={{ marginTop:8, paddingLeft:10, borderLeft:'2px solid var(--accent)', color:'var(--ink-3)', fontSize:12.5, lineHeight:1.45 }}>{cite.quote}</div>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+
+            {/* what will be written — heading + a clamped preview, at most two */}
             {compileResult && compileResult.wikiPatches && compileResult.wikiPatches.length>0 && (
-              <div style={{ marginTop:18, textAlign:'left', display:'grid', gap:8 }}>
-                <div className="mono-label" style={{ textAlign:'center' }}>Wiki proposals</div>
-                {compileResult.wikiPatches.slice(0,3).map((patch,i)=>(
+              <div style={{ marginTop:16, textAlign:'left', display:'grid', gap:8 }}>
+                <div className="mono-label">{window.t('done_wiki_props')}</div>
+                {compileResult.wikiPatches.slice(0,2).map((patch,i)=>(
                   <div key={patch.entryId+'-'+i} style={{ padding:'11px 12px', borderRadius:12, border:'1px solid var(--hair-soft)', background:'var(--card)' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center' }}>
-                      <div style={{ fontSize:14, fontWeight:600, color:'var(--ink)' }}>{patch.heading}</div>
-                      <span className="mono-label">{patch.status || 'append'}</span>
-                    </div>
-                    <div style={{ marginTop:6, fontSize:12.5, lineHeight:1.45, color:'var(--ink-3)' }}>{patch.body}</div>
+                    <div style={{ fontSize:14, fontWeight:600, color:'var(--ink)' }}>{patch.heading}</div>
+                    <div style={{ marginTop:5, fontSize:12.5, lineHeight:1.45, color:'var(--ink-3)',
+                      display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{patch.body}</div>
                   </div>
                 ))}
               </div>
             )}
-            {compileResult && compileResult.mapUpdates && compileResult.mapUpdates.length>0 && (
-              <div style={{ marginTop:18, textAlign:'left', display:'grid', gap:8 }}>
-                <div className="mono-label" style={{ textAlign:'center' }}>Map updates</div>
-                {compileResult.mapUpdates.slice(0,4).map((update,i)=>{
-                  const n = byId[update.nodeId];
-                  return (
-                    <div key={update.nodeId+'-'+i} style={{ padding:'10px 12px', borderRadius:12, border:'1px solid var(--hair-soft)', background:'var(--card)' }}>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:7, fontSize:13.5, color:'var(--ink)' }}>
-                          <span style={{ width:9, height:9, borderRadius:'50%', background:'radial-gradient(circle, '+hueColor(n?n.hue:'blue')+', transparent 70%)' }}/>
-                          {n ? n.label : update.nodeId}
-                        </div>
-                        <span className="mono-label">+{Math.round((update.delta||0)*100)} · {update.coverage||'partial'}</span>
-                      </div>
-                      <div style={{ marginTop:6, fontSize:12.5, lineHeight:1.45, color:'var(--ink-3)' }}>{update.reason}</div>
-                      {update.nextGap && <div style={{ marginTop:5, fontSize:12, color:'var(--ink-4)' }}>Gap: {update.nextGap}</div>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+
             <div style={{ display:'flex', justifyContent:'center', gap:10, marginTop:24 }}>
-              <button onClick={onClose} style={btnGhostA}>暂不写入</button>
-              <button disabled={!compileResult || compileError || reviewRejected} onClick={()=>finish('map')} style={{ ...btnSolidA, opacity:(!compileResult || compileError || reviewRejected)?0.45:1 }}>
-                <Icon name="check" s={15}/> {reviewRejected ? 'Reviewer 建议暂不写入' : '确认写入 Wiki + Map'}
+              <button onClick={onClose} style={btnGhostA}>{window.t('done_hold')}</button>
+              <button disabled={!compileResult || compileError || reviewRejected} onClick={()=>finish('wiki')} style={{ ...btnSolidA, opacity:(!compileResult || compileError || reviewRejected)?0.45:1 }}>
+                <Icon name="check" s={15}/> {reviewRejected ? window.t('done_reviewer_hold') : window.t('done_confirm')}
               </button>
             </div>
           </div>

@@ -53,7 +53,7 @@ const FEEDBACK_SCHEMA = {
   required: ['recommendation', 'summary', 'reviewNotes', 'nextActions', 'checklist', 'wikiReview', 'mapReview', 'riskFlags'],
 };
 
-async function generateFeedback({ extraction, linked, graph, wiki, mapResult, parsed, chunks }) {
+async function generateFeedback({ extraction, linked, graph, wiki, mapResult, parsed, chunks, locale }) {
   const fallback = localGenerateFeedback({ extraction, linked, graph, wiki, mapResult });
   const llm = await runLlmStage({
     stage: 'feedback',
@@ -61,6 +61,7 @@ async function generateFeedback({ extraction, linked, graph, wiki, mapResult, pa
     schema: FEEDBACK_SCHEMA,
     parsed,
     chunks,
+    locale,
     system: [
       'You are Lumen AI reviewer.',
       'You review a source compile proposal before it is applied to the user wiki and understanding map.',

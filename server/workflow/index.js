@@ -1,4 +1,5 @@
 const { SCHEMA_VERSION } = require('../schema');
+const { ingestSource } = require('./ingestion');
 const { normalizeInput } = require('./input');
 const { parseSource } = require('./parser');
 const { chunkText } = require('./chunker');
@@ -21,16 +22,18 @@ function summarizeStage(stage) {
   };
 }
 
-async function runLumenWorkflow({ source, map, boosts }) {
-  const input = normalizeInput(source);
+async function runLumenWorkflow({ source, map, boosts, targetEntryId, locale }) {
+  const lang = locale === 'en' ? 'en' : 'zh';
+  const ingestedSource = await ingestSource(source);
+  const input = normalizeInput(ingestedSource);
   const parsed = await parseSource(input);
   const chunks = await chunkText(parsed);
-  const extraction = await extractKnowledge({ parsed, chunks, map, boosts });
-  const graph = await generateKnowledgeGraph({ extraction, parsed, chunks, map });
+  const extraction = await extractKnowledge({ parsed, chunks, map, boosts, targetEntryId, locale: lang });
+  const graph = await generateKnowledgeGraph({ extraction, parsed, chunks, map, locale: lang });
   const linked = await linkSources({ extraction, chunks, parsed });
-  const wiki = await generateWiki({ extraction, parsed, chunks });
-  const mapResult = await updateMap({ extraction, boosts, map, parsed, chunks });
-  const feedback = await generateFeedback({ extraction, linked, graph, wiki, mapResult, parsed, chunks });
+  const wiki = await generateWiki({ extraction, parsed, chunks, locale: lang });
+  const mapResult = await updateMap({ extraction, boosts, map, parsed, chunks, locale: lang });
+  const feedback = await generateFeedback({ extraction, linked, graph, wiki, mapResult, parsed, chunks, locale: lang });
 
   const result = {
     schemaVersion: SCHEMA_VERSION,
@@ -68,6 +71,7 @@ async function runLumenWorkflow({ source, map, boosts }) {
   };
   result._pipeline = {
     input: input.metadata.kind,
+    ingestion: input.metadata.ingestion || null,
     parser: 'plain-text',
     chunks: chunks.length,
     extractor: extraction._extractor || 'local-heuristic',

@@ -20,6 +20,7 @@ Replace next:
 ## What Is Real Structure Now
 
 - `server/index.js` serves the app and exposes API routes.
+- `server/workflow/ingestion.js` turns any uploaded source type into plain text: URL fetch + HTML readability, PDF text extraction, DOCX (`word/document.xml`) parsing, image OCR (vision stage), and audio transcription via OpenAI Whisper.
 - `server/workflow/input.js` normalizes PDF/webpage/note/chat-shaped input into one source record.
 - `server/workflow/parser.js` turns source content into clean text plus metadata.
 - `server/workflow/chunker.js` creates source chunks with stable ids and offsets.
@@ -70,7 +71,18 @@ POST /api/reviews/:id/apply
 
 GET/POST /api/settings/ai
   -> reads/writes engine mode, provider, model preset, endpoint, and key for demos
-  -> reads/writes per-stage model routing for parser, chunking, extraction, wiki, graph, linker, map, feedback
+  -> reads/writes per-stage model routing for parser, chunking, imageOcr, audioTranscription, extraction, wiki, graph, linker, map, feedback
+```
+
+## Audio / Whisper Configuration
+
+Audio and voice sources are transcribed through the OpenAI audio transcription API before compilation.
+
+```text
+OPENAI_API_KEY            shared key (also used for the Responses API)
+LUMEN_WHISPER_MODEL       transcription model (default: whisper-1; e.g. gpt-4o-transcribe)
+LUMEN_WHISPER_ENDPOINT    override transcription endpoint (default: api.openai.com/v1/audio/transcriptions)
+LUMEN_WHISPER_TIMEOUT_MS  upload timeout in ms (default: 120000)
 ```
 
 ## Run Locally

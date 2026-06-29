@@ -171,6 +171,7 @@ function Sources({ data, litByMap, inbox=[], selectedSourceId, setSelectedSource
 
 function SourceDetail({ data, litByMap, src, onOpenEntry, onGotoMapNode }) {
   const ents = LX.entriesForSource(src.id);
+  const evidence = Array.isArray(src.citations) ? src.citations : (Array.isArray(src.evidence) ? src.evidence : []);
   return (
     <div style={{ maxWidth:720, margin:'0 auto', padding:'48px 44px 100px' }}>
       <div style={{ display:'flex', alignItems:'center', gap:14 }}>
@@ -208,11 +209,33 @@ function SourceDetail({ data, litByMap, src, onOpenEntry, onGotoMapNode }) {
         </div>
       </div>
 
+      {/* evidence extracted */}
+      <div style={{ marginTop:34 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <Icon name="note" s={15} c="var(--ink-4)"/>
+          <h2 style={detailH2}>{window.t('evidence_extracted')}</h2>
+        </div>
+        {evidence.length ? (
+          <div style={{ display:'grid', gap:10, marginTop:14 }}>
+            {evidence.slice(0,3).map((item,i)=>(
+              <div key={(item.id||'evidence')+i} style={evidenceCard}>
+                <div className="mono-label" style={{ marginBottom:6 }}>{item.locator || item.kind || 'citation'}</div>
+                <div style={{ fontSize:13.5, lineHeight:1.5, color:'var(--ink-2)' }}>{item.quote || item.text || item.summary}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ marginTop:12, padding:'12px 13px', borderRadius:11, border:'1px solid var(--hair-soft)', background:'var(--card)', color:'var(--ink-3)', fontSize:13, lineHeight:1.45 }}>
+            {window.t('evidence_empty')}
+          </div>
+        )}
+      </div>
+
       {/* illuminated regions */}
       <div style={{ marginTop:36 }}>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <Icon name="atlas" s={15} c="var(--ink-4)"/>
-          <h2 style={detailH2}>{window.t('map_regions_lit')}</h2>
+          <h2 style={detailH2}>{window.t('map_coverage_impact')}</h2>
         </div>
         <div style={{ display:'flex', flexDirection:'column', gap:18, marginTop:16 }}>
           {(src.illuminated||[]).map((il,i)=>{ const m=LX.MAP_BY[il.map]; if(!m) return null;
@@ -378,6 +401,7 @@ const filterChip = { padding:'6px 12px', borderRadius:18, border:'1px solid var(
 const srcRow = { width:'100%', display:'flex', gap:12, alignItems:'flex-start', textAlign:'left', padding:'12px 12px', borderRadius:12, border:'none', marginBottom:3, transition:'background .15s' };
 const detailH2 = { margin:0, fontFamily:'var(--sans)', fontWeight:600, fontSize:16, letterSpacing:'-0.01em', color:'var(--ink)' };
 const contribCard = { textAlign:'left', padding:'15px 16px', borderRadius:14, border:'1px solid var(--hair)', background:'var(--card)', transition:'border-color .2s', cursor:'pointer' };
+const evidenceCard = { padding:'12px 13px', borderRadius:11, border:'1px solid var(--hair-soft)', background:'var(--card)' };
 const nodeChip = { display:'inline-flex', alignItems:'center', gap:7, padding:'6px 11px', borderRadius:18, border:'1px solid var(--hair)', background:'var(--card-solid)', color:'var(--ink-2)', fontSize:12.5, fontWeight:500 };
 
 window.Sources = Sources;

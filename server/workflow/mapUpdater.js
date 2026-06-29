@@ -18,6 +18,15 @@ function clampDelta(delta, coverage) {
 
 function localUpdateMap({ extraction, boosts }) {
   const boostMap = boosts || {};
+  const claimIdsForConcept = (concept) => {
+    const conceptChunks = new Set(concept.chunkIds || []);
+    const direct = extraction.claims.filter((claim) => (
+      claim.targetEntryId === 'entry-' + concept.mapNodeId ||
+      (claim.chunkIds || []).some((chunkId) => conceptChunks.has(chunkId))
+    ));
+    const claims = direct.length ? direct : extraction.claims;
+    return claims.map((claim) => claim.id).filter(Boolean).slice(0, 2);
+  };
   return extraction.concepts.map((concept) => ({
     nodeId: concept.mapNodeId,
     delta: clampDelta(boostMap[concept.mapNodeId] || Math.max(0.18, Math.min(0.4, concept.relevance - 0.25)), 'partial'),
@@ -25,7 +34,7 @@ function localUpdateMap({ extraction, boosts }) {
     coverage: 'partial',
     nextGap: '继续补充反例、定义边界或更强证据。',
     updateRule: 'new_node_evidence',
-    evidenceClaimIds: extraction.claims.filter((claim) => claim.targetEntryId === 'entry-' + concept.mapNodeId).map((claim) => claim.id).slice(0, 2),
+    evidenceClaimIds: claimIdsForConcept(concept),
   }));
 }
 
@@ -54,7 +63,7 @@ const MAP_SCHEMA = {
   required: ['mapUpdates'],
 };
 
-async function updateMap({ extraction, boosts, map, parsed, chunks }) {
+async function updateMap({ extraction, boosts, map, parsed, chunks, locale }) {
   const fallback = localUpdateMap({ extraction, boosts });
   const validNodeIds = new Set(extraction.concepts.map((concept) => concept.mapNodeId));
   const llm = await runLlmStage({
@@ -63,6 +72,7 @@ async function updateMap({ extraction, boosts, map, parsed, chunks }) {
     schema: MAP_SCHEMA,
     parsed,
     chunks,
+    locale,
     system: [
       'You are Lumen understanding-map updater.',
       'You decide how much a new source should brighten existing concept nodes.',

@@ -12,6 +12,7 @@ const KNOWLEDGE_FILE = path.join(DATA_DIR, 'knowledge-db.json');
 
 const DEFAULT_STATE = {
   extraMaps: [],
+  extraEntries: [],
   sources: [],
   inbox: [],
   litByMap: {},
@@ -99,6 +100,7 @@ function normalizeState(state) {
     ...DEFAULT_STATE,
     ...(state || {}),
     extraMaps,
+    extraEntries: Array.isArray(state && state.extraEntries) ? state.extraEntries : [],
     sources: Array.isArray(state && state.sources) ? state.sources : [],
     inbox: Array.isArray(state && state.inbox) ? state.inbox : [],
     litByMap: state && state.litByMap && typeof state.litByMap === 'object' ? state.litByMap : {},
@@ -224,11 +226,17 @@ function saveKnowledgeRecords(records) {
   const wikiEntries = (result.wikiPatches || []).map((patch) => ({
     id: patch.entryId,
     sourceId,
+    sourceTitle: source.title || (source.metadata && source.metadata.title) || '',
+    sourceKind: source.kind || source.type || '',
+    operation: patch.operation || 'append_section',
     heading: patch.heading,
     body: patch.body,
     status: patch.status || 'append',
     updateRule: patch.updateRule || 'new_evidence',
     evidenceClaimIds: patch.evidenceClaimIds || [],
+    mapRefs: (result.concepts || [])
+      .filter((concept) => concept && ('entry-' + concept.mapNodeId === patch.entryId || concept.mapNodeId === patch.entryId))
+      .map((concept) => ({ node: concept.mapNodeId, label: concept.label })),
     updatedAt: new Date().toISOString(),
   }));
   const mapNodeEvidence = (result.mapUpdates || []).map((update) => ({

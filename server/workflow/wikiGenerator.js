@@ -77,7 +77,7 @@ const WIKI_SCHEMA = {
   required: ['wikiPatches', 'openQuestions'],
 };
 
-async function generateWiki({ extraction, parsed, chunks }) {
+async function generateWiki({ extraction, parsed, chunks, locale }) {
   const fallback = localGenerateWiki({ extraction });
   const llm = await runLlmStage({
     stage: 'wiki',
@@ -85,6 +85,7 @@ async function generateWiki({ extraction, parsed, chunks }) {
     schema: WIKI_SCHEMA,
     parsed,
     chunks,
+    locale,
     system: [
       'You are Lumen wiki compiler.',
       'You turn extracted, cited claims into wiki patch proposals for human review.',

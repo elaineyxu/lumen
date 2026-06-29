@@ -10,7 +10,7 @@ const TYPE_LABEL = new Proxy({}, { get: (_, k) => window.t('type_' + String(k)) 
 
 function WikiView({ data, litByMap,
                     activeEntryId, setActiveEntryId, browseCat, setBrowseCat,
-                    onGotoMapNode, onAddSource, onOpenSource,
+                    onGotoMapNode, onAddSource, onOpenSource, onCreateMap,
                     wikiProposals=[], onApplyWikiProposal, onDismissWikiProposal }) {
   const { BRANCHES, CATEGORIES } = data;
   const hasWiki = BRANCHES.length > 0 && CATEGORIES.length > 0;
@@ -24,6 +24,10 @@ function WikiView({ data, litByMap,
 
   const entry = activeEntryId ? LX.ENTRY_BY[activeEntryId] : null;
   const showIndex = !!browseCat || !entry;
+  const entryAddTarget = entry && !browseCat ? (() => {
+    const ref = (entry.mapRefs || [])[0] || {};
+    return { targetEntryId:entry.id, targetMapId:ref.map, presetNode:ref.node };
+  })() : null;
 
   const matches = useMemoW(()=>{
     const s=q.trim().toLowerCase(); if(!s) return null;
@@ -128,7 +132,7 @@ function WikiView({ data, litByMap,
       {/* ---- center ---- */}
       <main ref={scrollRef} style={{ position:'relative', zIndex:2, overflowY:'auto', padding:'46px 7% 120px' }}>
         {!hasWiki
-          ? <EmptyWiki onAddSource={onAddSource} />
+          ? <EmptyWiki onAddSource={onAddSource} onCreateMap={onCreateMap} />
           : showIndex
           ? <CategoryIndex data={data} litByMap={litByMap} catId={browseCat||CATEGORIES[0].id} onOpen={openEntry} />
           : <>
@@ -143,28 +147,33 @@ function WikiView({ data, litByMap,
       {/* ---- right rail ---- */}
       <aside ref={railRef} style={{ position:'relative', zIndex:2, borderLeft:'1px solid var(--hair-soft)',
         padding:'26px 20px 60px', overflowY:'auto', background:'var(--paper-deep)' }}>
-        <button onClick={()=>onAddSource(null)} style={addSrcBtn}>
+        <button onClick={()=>onAddSource(entryAddTarget && entryAddTarget.presetNode, entryAddTarget || {})} style={addSrcBtn}>
           <Icon name="plus" s={16}/> {window.t('add_a_source')}
         </button>
         {entry && !browseCat && <EntryMeta entry={entry} litByMap={litByMap} hiCite={hiCite} srcRefs={srcRefs}
           onGotoMapNode={onGotoMapNode}
           onOpenEntry={openEntry} onOpenSource={onOpenSource} onBrowseCat={(id)=>{ setActiveEntryId(null); setBrowseCat(id); }} />}
-        {showIndex && <IndexMeta data={data} litByMap={litByMap} catId={browseCat||'phil-mind'} />}
+        {showIndex && <IndexMeta data={data} litByMap={litByMap} catId={browseCat||(CATEGORIES[0]&&CATEGORIES[0].id)||'questions'} />}
       </aside>
     </div>
   );
 }
 
-function EmptyWiki({ onAddSource }) {
+function EmptyWiki({ onAddSource, onCreateMap }) {
   return (
     <div style={{ minHeight:'70vh', display:'grid', placeItems:'center' }}>
       <div style={{ textAlign:'center', maxWidth:390 }}>
         <Icon name="wiki" s={34} c="var(--ink-4)"/>
-        <h1 style={{ margin:'14px 0 0', fontFamily:'var(--serif)', fontStyle:'italic', fontWeight:400, fontSize:30, color:'var(--ink)' }}>Your wiki is empty</h1>
-        <p style={{ margin:'8px 0 0', fontSize:14, lineHeight:1.55, color:'var(--ink-3)' }}>Formal workspaces start blank. Add a source or create a map to begin growing entries.</p>
-        <button onClick={()=>onAddSource(null)} style={{ ...addSrcBtn, width:'auto', display:'inline-flex', marginTop:18, padding:'10px 16px' }}>
-          <Icon name="plus" s={16}/> {window.t('add_a_source')}
-        </button>
+        <h1 style={{ margin:'14px 0 0', fontFamily:'var(--serif)', fontStyle:'italic', fontWeight:400, fontSize:30, color:'var(--ink)' }}>{window.t('empty_wiki_title')}</h1>
+        <p style={{ margin:'8px 0 0', fontSize:14, lineHeight:1.55, color:'var(--ink-3)' }}>{window.t('empty_wiki_sub')}</p>
+        <div style={{ display:'flex', justifyContent:'center', gap:10, marginTop:18, flexWrap:'wrap' }}>
+          <button onClick={()=>onAddSource(null)} style={{ ...addSrcBtn, width:'auto', display:'inline-flex', padding:'10px 16px' }}>
+            <Icon name="plus" s={16}/> {window.t('add_a_source')}
+          </button>
+          <button onClick={()=>onCreateMap && onCreateMap()} style={wikiGhostBtn}>
+            <Icon name="question" s={15}/> {window.t('create_question')}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -422,24 +431,8 @@ function EntryMeta({ entry, litByMap, hiCite, srcRefs, onGotoMapNode, onOpenEntr
   const cats = LX.relatedCategories(entry).filter(c=>c.id!==entry.category);
   return (
     <>
-      {/* appears in maps — jump to the concept's node in the Atlas */}
-      <div style={{ marginTop:22 }}>
-        <div className="mono-label" style={{ marginBottom:11 }}>{window.t('appears_in_maps', maps.length)}</div>
-        <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
-          {maps.map(({map,node})=>{ const n=map.nodes.find(x=>x.id===node); const e=n?effExploredW(n,(litByMap&&litByMap[map.id])||{}):0; return (
-            <button key={map.id} onClick={()=>onGotoMapNode(map.id, node)} title="Show this concept on the map"
-              style={{ ...mapMetaRow, cursor:'pointer' }}>
-              <span style={{ width:9, height:9, borderRadius:'50%', flex:'none',
-                background:`radial-gradient(circle, ${hueColor(map.accentHue)}, transparent 72%)` }}/>
-              <span style={{ minWidth:0, flex:1, display:'flex', flexDirection:'column', gap:3, textAlign:'left' }}>
-                <span style={{ fontSize:13, color:'var(--ink)', fontWeight:500, lineHeight:1.25 }}>{map.title}</span>
-                <span className="mono-label" style={{ fontSize:8.5 }}>{window.t('pct_lit_show', n?n.label:'—', Math.round(e*100))}</span>
-              </span>
-              <span style={{ flex:'none', color:'var(--ink-4)' }}><Icon name="upright" s={13}/></span>
-            </button>
-          );})}
-        </div>
-      </div>
+      <MapCheckPanel maps={maps} litByMap={litByMap} onGotoMapNode={onGotoMapNode} />
+      <SourcesBehindPanel srcs={srcs} hiCite={hiCite} srcRefs={srcRefs} onOpenSource={onOpenSource} />
 
       {/* related categories */}
       {cats.length>0 && (
@@ -450,35 +443,6 @@ function EntryMeta({ entry, litByMap, hiCite, srcRefs, onGotoMapNode, onOpenEntr
               <button key={c.id} onClick={()=>onBrowseCat&&onBrowseCat(c.id)} style={catChip}>
                 <span style={{ width:7, height:7, borderRadius:'50%', background:`radial-gradient(circle, ${hueColor(c.hue)}, transparent 72%)` }}/>
                 {c.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* sources */}
-      {srcs.length>0 && (
-        <div style={{ marginTop:24 }}>
-          <div className="mono-label" style={{ marginBottom:11 }}>{window.t('cited_sources', srcs.length)}</div>
-          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            {srcs.map(s=>(
-              <button key={s.id} onClick={()=>onOpenSource&&onOpenSource(s.id)} ref={el=>srcRefs.current[s.n]=el} style={{
-                display:'flex', gap:11, padding:'10px 11px', borderRadius:10, width:'100%', textAlign:'left',
-                border:'1px solid '+(hiCite===s.n?'var(--accent)':'var(--hair-soft)'),
-                background: hiCite===s.n?'var(--accent-soft)':'var(--card)',
-                boxShadow: hiCite===s.n?'0 0 0 3px var(--accent-soft)':'none', transition:'all .3s' }}>
-                <span style={{ width:30, height:30, borderRadius:8, flex:'none', display:'grid', placeItems:'center',
-                  background:'color-mix(in oklab, '+SRC_TINT[s.tint]+' 16%, transparent)', color:SRC_TINT[s.tint] }}>
-                  <Icon name={s.type} s={16}/>
-                </span>
-                <span style={{ minWidth:0, display:'flex', flexDirection:'column', gap:3 }}>
-                  <span style={{ display:'flex', alignItems:'center', gap:6 }}>
-                    <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--ink-4)' }}>[{s.n}]</span>
-                    <span style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.1em', textTransform:'uppercase', color:SRC_TINT[s.tint] }}>{s.type}</span>
-                  </span>
-                  <span style={{ fontSize:13, color:'var(--ink)', lineHeight:1.3, fontWeight:500, textWrap:'pretty' }}>{s.title}</span>
-                  <span style={{ fontSize:11.5, color:'var(--ink-3)' }}>{s.meta}</span>
-                </span>
               </button>
             ))}
           </div>
@@ -515,6 +479,67 @@ function EntryMeta({ entry, litByMap, hiCite, srcRefs, onGotoMapNode, onOpenEntr
         </div>
       )}
     </>
+  );
+}
+
+function MapCheckPanel({ maps, litByMap, onGotoMapNode }) {
+  return (
+    <div style={{ marginTop:22 }}>
+      <div className="mono-label" style={{ marginBottom:11 }}>{window.t('map_check')}</div>
+      {maps.length ? (
+        <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
+          {maps.map(({map,node})=>{ const n=map.nodes.find(x=>x.id===node); const e=n?effExploredW(n,(litByMap&&litByMap[map.id])||{}):0; return (
+            <button key={map.id} onClick={()=>onGotoMapNode(map.id, node)} title={window.t('open_map_check')}
+              style={{ ...mapMetaRow, cursor:'pointer' }}>
+              <span style={{ width:9, height:9, borderRadius:'50%', flex:'none',
+                background:`radial-gradient(circle, ${hueColor(map.accentHue)}, transparent 72%)` }}/>
+              <span style={{ minWidth:0, flex:1, display:'flex', flexDirection:'column', gap:6, textAlign:'left' }}>
+                <span style={{ fontSize:13, color:'var(--ink)', fontWeight:500, lineHeight:1.25 }}>{map.title}</span>
+                <CoverageBar pct={Math.max(4, Math.round(e*100))} hue={n?n.hue:map.accentHue} height={4}/>
+                <span className="mono-label" style={{ fontSize:8.5 }}>{window.t('pct_lit_show', n?n.label:'—', Math.round(e*100))}</span>
+              </span>
+              <span style={{ flex:'none', color:'var(--ink-4)' }}><Icon name="upright" s={13}/></span>
+            </button>
+          );})}
+        </div>
+      ) : (
+        <div style={emptyRailPanel}>{window.t('no_map_check')}</div>
+      )}
+    </div>
+  );
+}
+
+function SourcesBehindPanel({ srcs, hiCite, srcRefs, onOpenSource }) {
+  return (
+    <div style={{ marginTop:24 }}>
+      <div className="mono-label" style={{ marginBottom:11 }}>{window.t('sources_behind_entry', srcs.length)}</div>
+      {srcs.length ? (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {srcs.map(s=>(
+            <button key={s.id} onClick={()=>onOpenSource&&onOpenSource(s.id)} ref={el=>srcRefs.current[s.n]=el} style={{
+              display:'flex', gap:11, padding:'10px 11px', borderRadius:10, width:'100%', textAlign:'left',
+              border:'1px solid '+(hiCite===s.n?'var(--accent)':'var(--hair-soft)'),
+              background: hiCite===s.n?'var(--accent-soft)':'var(--card)',
+              boxShadow: hiCite===s.n?'0 0 0 3px var(--accent-soft)':'none', transition:'all .3s' }}>
+              <span style={{ width:30, height:30, borderRadius:8, flex:'none', display:'grid', placeItems:'center',
+                background:'color-mix(in oklab, '+SRC_TINT[s.tint]+' 16%, transparent)', color:SRC_TINT[s.tint] }}>
+                <Icon name={s.type} s={16}/>
+              </span>
+              <span style={{ minWidth:0, display:'flex', flexDirection:'column', gap:3 }}>
+                <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--ink-4)' }}>[{s.n}]</span>
+                  <span style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.1em', textTransform:'uppercase', color:SRC_TINT[s.tint] }}>{s.type}</span>
+                </span>
+                <span style={{ fontSize:13, color:'var(--ink)', lineHeight:1.3, fontWeight:500, textWrap:'pretty' }}>{s.title}</span>
+                <span style={{ fontSize:11.5, color:'var(--ink-3)' }}>{s.meta}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div style={emptyRailPanel}>{window.t('no_sources_behind')}</div>
+      )}
+    </div>
   );
 }
 
@@ -566,8 +591,12 @@ const indexCard = { textAlign:'left', border:'1px solid var(--hair)', background
   padding:'16px 17px', transition:'border-color .2s', cursor:'pointer' };
 const mapMetaRow = { display:'flex', alignItems:'center', gap:10, width:'100%', textAlign:'left', padding:'9px 10px',
   borderRadius:10, border:'1px solid var(--hair-soft)', background:'var(--card)' };
+const emptyRailPanel = { padding:'11px 12px', borderRadius:10, border:'1px solid var(--hair-soft)', background:'var(--card)',
+  color:'var(--ink-3)', fontSize:12.5, lineHeight:1.45 };
 const catChip = { display:'inline-flex', alignItems:'center', gap:7, padding:'6px 11px', borderRadius:18,
   border:'1px solid var(--hair)', background:'var(--card)', color:'var(--ink-2)', fontSize:12, fontWeight:500, cursor:'pointer' };
+const wikiGhostBtn = { display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7, padding:'10px 14px',
+  borderRadius:11, border:'1px solid var(--hair)', background:'transparent', color:'var(--ink-2)', fontSize:13.5, fontWeight:600 };
 const proposalGhostBtn = { padding:'7px 11px', borderRadius:9, border:'1px solid var(--hair)',
   background:'transparent', color:'var(--ink-3)', fontSize:12.5, fontWeight:600 };
 const proposalApplyBtn = { padding:'7px 12px', borderRadius:9, border:'none',

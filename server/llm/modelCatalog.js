@@ -28,6 +28,8 @@ const MODEL_PRESETS = {
 const STAGE_DEFAULTS = {
   sourceParser: { mode: 'auto', preset: 'economy', label: 'Source parser' },
   chunking: { mode: 'auto', preset: 'economy', label: 'Chunking helper' },
+  imageOcr: { mode: 'auto', preset: 'economy', label: 'Image OCR' },
+  audioTranscription: { mode: 'auto', preset: 'economy', label: 'Audio transcription' },
   extraction: { mode: 'auto', preset: 'balanced', label: 'Knowledge extraction' },
   wiki: { mode: 'auto', preset: 'balanced', label: 'Wiki compiler' },
   knowledgeGraph: { mode: 'auto', preset: 'balanced', label: 'Knowledge graph' },

@@ -127,7 +127,44 @@
   ];
 
   /* ============================================================
-     MAP 4 — Fermentation & flavor  (newest, least explored)
+     MAP 4 — Learning & memory in the brain
+     ============================================================ */
+  const M5_CLUSTERS = {
+    systems: { label: 'Memory Systems', hue: 'blue', note: 'Which brain systems support different memory functions' },
+    cellular: { label: 'Cellular Mechanisms', hue: 'teal', note: 'How synapses and circuits change with experience' },
+    dynamics: { label: 'Circuit Dynamics', hue: 'violet', note: 'Rhythms, replay, and coordination across scales' },
+    methods: { label: 'Methods & Evidence', hue: 'amber', note: 'How the field knows what it knows' },
+    open: { label: 'Open Questions', hue: 'coral', note: 'Where current evidence is still thin or contested' },
+  };
+  const M5_NODES = [
+    { id:'memory-systems', label:'Memory Systems', cluster:'systems', x:48, y:42, size:122, hue:'blue', explored:.78, sources:6, hub:true },
+    { id:'hippocampus', label:'Hippocampus', cluster:'systems', x:24, y:34, size:100, hue:'blue', explored:.72, sources:5 },
+    { id:'prefrontal-control', label:'Prefrontal Control', cluster:'systems', x:25, y:62, size:76, hue:'blue', explored:.44, sources:2 },
+    { id:'amygdala-valence', label:'Amygdala & Valence', cluster:'systems', x:16, y:78, size:68, hue:'coral', explored:.38, sources:2 },
+    { id:'synaptic-plasticity', label:'Synaptic Plasticity', cluster:'cellular', x:70, y:31, size:104, hue:'teal', explored:.70, sources:4 },
+    { id:'ltp-ltd', label:'LTP / LTD', cluster:'cellular', x:84, y:48, size:82, hue:'teal', explored:.62, sources:3 },
+    { id:'engram', label:'Engram Cells', cluster:'cellular', x:68, y:66, size:82, hue:'teal', explored:.50, sources:2 },
+    { id:'sleep-replay', label:'Sleep Replay', cluster:'dynamics', x:52, y:78, size:88, hue:'violet', explored:.58, sources:3 },
+    { id:'theta-gamma', label:'Theta–Gamma Rhythms', cluster:'dynamics', x:45, y:22, size:72, hue:'violet', explored:.46, sources:2 },
+    { id:'predictive-coding', label:'Predictive Coding', cluster:'dynamics', x:78, y:18, size:76, hue:'violet', explored:.42, sources:2 },
+    { id:'lesion-evidence', label:'Lesion Evidence', cluster:'methods', x:10, y:48, size:70, hue:'amber', explored:.64, sources:3 },
+    { id:'neuroimaging', label:'Neuroimaging', cluster:'methods', x:89, y:75, size:66, hue:'amber', explored:.34, sources:1 },
+    { id:'reconsolidation', label:'Reconsolidation', cluster:'open', x:38, y:88, size:66, hue:'coral', explored:.36, sources:1 },
+    { id:'memory-generalization', label:'Generalization vs. Detail', cluster:'open', x:61, y:91, size:64, hue:'coral', explored:.24, sources:0 },
+  ];
+  const M5_LINKS = [
+    ['memory-systems','hippocampus','solid'], ['memory-systems','prefrontal-control','solid'],
+    ['memory-systems','synaptic-plasticity','solid'], ['hippocampus','lesion-evidence','solid'],
+    ['hippocampus','theta-gamma','dash'], ['hippocampus','sleep-replay','dash'],
+    ['synaptic-plasticity','ltp-ltd','solid'], ['synaptic-plasticity','engram','dash'],
+    ['ltp-ltd','engram','dot'], ['sleep-replay','reconsolidation','dash'],
+    ['prefrontal-control','memory-generalization','dash'], ['amygdala-valence','reconsolidation','dot'],
+    ['predictive-coding','memory-generalization','dash'], ['neuroimaging','engram','dot'],
+    ['theta-gamma','sleep-replay','dot'], ['memory-systems','predictive-coding','dot'],
+  ];
+
+  /* ============================================================
+     MAP 5 — Fermentation & flavor  (newest, least explored)
      ============================================================ */
   const M4_CLUSTERS = {
     microbe: { label: 'Microbes',  hue: 'teal',  note: 'Who does the work' },
@@ -151,6 +188,9 @@
   ];
 
   const MAPS = [
+    { id:'neuro-memory', title:'Learning & memory in the brain', question:'How does the brain <em>turn experience into memory</em>?',
+      domain:'Neuroscience', accentHue:'teal', created:'5 days ago', updated:'just now',
+      clusters:M5_CLUSTERS, nodes:M5_NODES, links:M5_LINKS },
     { id:'ai-self', title:'Is AI self-aware?', question:'Does an artificial system <em>have a self</em>?',
       domain:'Philosophy of Mind', accentHue:'blue', created:'3 weeks ago', updated:'2 hours ago',
       clusters:M1_CLUSTERS, nodes:M1_NODES, links:M1_LINKS },
@@ -192,6 +232,76 @@
        **text**            bold
   */
   const ENTRIES = [
+    /* ---------- neuroscience demo spine ---------- */
+    {
+      id:'memory-systems', type:'concept', title:'Neural Basis of Learning & Memory',
+      subtitle:'How experience becomes a durable, retrievable pattern in the brain',
+      category:'neuro', mapRefs:[{ map:'neuro-memory', node:'memory-systems' }],
+      updated:'Updated just now · synthesised from 6 neuroscience sources',
+      updatedShort:'just now', sourceNs:[15,16,17,18,19,20],
+      backlinks:['hippocampus','synaptic-plasticity','sleep-stages'],
+      lead:[
+        "__Learning and memory__ are not one faculty but a stack of systems: cellular plasticity changes synapses, hippocampal circuits bind episodes, prefrontal networks guide retrieval, and sleep helps stabilise what should last. ((15)) ((16))",
+        "For a demo, this page shows what Lumen does best: it turns a pile of papers, lecture notes, diagrams, and voice memos into a living synthesis where every claim points back to evidence and every concept has a place on the map.",
+      ],
+      sections:[
+        { id:'systems', heading:'The system-level picture', blocks:[
+          { type:'p', text:"The hippocampus is central for forming new declarative memories, but it is not the final storage box. Lesion evidence from H.M. shows a sharp dissociation: profound anterograde amnesia with many older memories and skills partly spared. ((16))" },
+          { type:'p', text:"A useful working model is distributed: hippocampus binds relational episodes quickly; neocortex gradually extracts stable structure; prefrontal control shapes what gets retrieved and used. ((15)) ((20))" },
+        ]},
+        { id:'cellular', heading:'What changes when learning happens', blocks:[
+          { type:'p', text:"At the cellular level, long-term potentiation and depression are candidate mechanisms for changing circuit weights. They do not equal memory by themselves, but they provide a plausible substrate for how experience alters future processing. ((17))" },
+          { type:'callout', text:"The demo point: Lumen can keep a high-level synthesis while preserving the lower-level evidence that supports each layer.", cite:17 },
+        ]},
+        { id:'sleep', heading:'Why sleep belongs on the same map', blocks:[
+          { type:'p', text:"Sleep is not a separate topic bolted onto memory. Replay during slow-wave sleep and coordination with spindles are part of the consolidation story, which is why Lumen connects this page to [[sleep-stages||The Architecture of a Night]]. ((18))" },
+        ]},
+        { id:'open', heading:'Open questions Lumen keeps visible', blocks:[
+          { type:'open', items:[
+            'When does reconsolidation rewrite a memory versus merely strengthen it?',
+            'How does the brain trade off detailed episodic recall against useful generalization?',
+            'Which claims are supported by lesion evidence, and which depend mostly on imaging correlations?',
+          ]},
+        ]},
+      ],
+    },
+    {
+      id:'hippocampus', type:'concept', title:'Hippocampus',
+      subtitle:'A fast-binding system for episodes, context, and relational memory',
+      category:'neuro', mapRefs:[{ map:'neuro-memory', node:'hippocampus' }],
+      updated:'Updated just now · synthesised from 4 sources', updatedShort:'just now',
+      sourceNs:[15,16,18,20], backlinks:['memory-systems'],
+      lead:[
+        "The __hippocampus__ is essential for rapidly binding the who, where, and when of experience. It is best understood as a relational indexing system rather than a warehouse that stores memories forever. ((16))",
+        "Its role becomes clearest when paired with evidence: lesion cases establish necessity, replay studies connect it to consolidation, and oscillation work shows how it coordinates with cortex. ((16)) ((18)) ((20))",
+      ],
+      sections:[],
+    },
+    {
+      id:'synaptic-plasticity', type:'concept', title:'Synaptic Plasticity',
+      subtitle:'How experience changes the future behaviour of a circuit',
+      category:'neuro', mapRefs:[{ map:'neuro-memory', node:'synaptic-plasticity' }],
+      updated:'Updated just now · synthesised from 3 sources', updatedShort:'just now',
+      sourceNs:[15,17,19], backlinks:['memory-systems'],
+      lead:[
+        "__Synaptic plasticity__ names the family of mechanisms by which synapses become stronger, weaker, or differently regulated after activity. Long-term potentiation is the canonical example and remains a central bridge between cellular neuroscience and memory theory. ((17))",
+        "Lumen keeps this separate from behaviour-level memory because the mapping is not one-to-one: plasticity is a mechanism, memory is an organised function spanning cells, circuits, systems, and time. ((15))",
+      ],
+      sections:[],
+    },
+    {
+      id:'moc-neuroscience', type:'moc', title:'Neuroscience — Map of Content',
+      subtitle:'A demo spine for memory, sleep, plasticity, and evidence',
+      category:'neuro', mapRefs:[{ map:'neuro-memory', node:'memory-systems' }],
+      updated:'A living index · neuroscience demo seed', updatedShort:'index',
+      sourceNs:[], backlinks:[],
+      lead:[
+        "This neuroscience MOC is the Pitch Day demo route: begin with [[memory-systems||Learning & Memory]], zoom into [[hippocampus||Hippocampus]] and [[synaptic-plasticity||Synaptic Plasticity]], then bridge to [[sleep-stages||The Architecture of a Night]].",
+        "It demonstrates the product loop in one field: source ingestion, evidence-grounded claims, wiki synthesis, and a map that visibly tracks which concepts are well covered and which remain open.",
+      ],
+      sections:[],
+    },
+
     /* ---------- the deep entry ---------- */
     {
       id:'self-awareness', type:'concept', title:'Self-Awareness in Artificial Systems',
@@ -429,6 +539,18 @@
       contributedTo:['sleep-stages'], illuminated:[{ map:'sleep', nodes:['sleep-stages','rem','slow-wave','memory'] }] },
     { id:'s14', n:14, type:'note', title:'Kraut log \u2014 batch #3 brine ratios', meta:'Personal note', tint:'amber', added:'2 days ago',
       contributedTo:['lacto'], illuminated:[{ map:'ferment', nodes:['lacto','salt-brine','umami'] }] },
+    { id:'s15', n:15, type:'paper', title:'Principles of Neural Science \u2014 memory chapters', meta:'Kandel et al. · textbook notes', tint:'blue', added:'just now',
+      contributedTo:['memory-systems','synaptic-plasticity'], illuminated:[{ map:'neuro-memory', nodes:['memory-systems','synaptic-plasticity','ltp-ltd'] }] },
+    { id:'s16', n:16, type:'paper', title:'Loss of Recent Memory After Bilateral Hippocampal Lesions', meta:'Scoville & Milner · 1957', tint:'blue', added:'just now',
+      contributedTo:['memory-systems','hippocampus'], illuminated:[{ map:'neuro-memory', nodes:['hippocampus','lesion-evidence','memory-systems'] }] },
+    { id:'s17', n:17, type:'paper', title:'Long-lasting potentiation of synaptic transmission', meta:'Bliss & Lømo · 1973', tint:'teal', added:'just now',
+      contributedTo:['synaptic-plasticity','memory-systems'], illuminated:[{ map:'neuro-memory', nodes:['synaptic-plasticity','ltp-ltd'] }] },
+    { id:'s18', n:18, type:'video', title:'Lecture: sleep replay and memory consolidation', meta:'Neuroscience course · 38 min', tint:'violet', added:'just now',
+      contributedTo:['memory-systems','hippocampus','sleep-stages'], illuminated:[{ map:'neuro-memory', nodes:['sleep-replay','theta-gamma','hippocampus'] }, { map:'sleep', nodes:['memory','slow-wave'] }] },
+    { id:'s19', n:19, type:'image', title:'Annotated hippocampal circuit diagram', meta:'Image · OCR + visual summary', tint:'violet', added:'just now',
+      contributedTo:['hippocampus','synaptic-plasticity'], illuminated:[{ map:'neuro-memory', nodes:['hippocampus','engram','neuroimaging'] }] },
+    { id:'s20', n:20, type:'voice', title:'Voice memo \u2014 memory as reconstruction', meta:'Whisper transcript · 3:41', tint:'amber', added:'just now',
+      contributedTo:['memory-systems','hippocampus'], illuminated:[{ map:'neuro-memory', nodes:['reconsolidation','memory-generalization','prefrontal-control'] }] },
   ];
 
   /* ============================================================
@@ -469,12 +591,19 @@
       note:'Both turn on the gap between behaviour and inner state: a feed optimises your behaviour without modelling your interests, much as a model reports a self it may not have.' },
     { a:'could-we-tell', b:'sleep-stages', aMap:'ai-self', bMap:'sleep',
       note:'\u201cIndicator properties\u201d for machine consciousness lean on the same neural markers that distinguish conscious wakefulness from deep sleep.' },
+    { a:'hippocampus', b:'sleep-stages', aMap:'neuro-memory', bMap:'sleep',
+      note:'Memory consolidation makes sleep and hippocampal replay part of the same neuroscience story rather than two separate topics.' },
+    { a:'synaptic-plasticity', b:'variable-reward', aMap:'neuro-memory', bMap:'attention',
+      note:'Reward learning connects synaptic change to habit formation: attention loops are behavioural symptoms of plastic circuits.' },
   ];
 
   /* ============================================================
      ACTIVITY — system-wide growth feed (Home)
      ============================================================ */
   const ACTIVITY = [
+    { t:'just now', map:'neuro-memory', text:'Seeded **Learning & Memory** with 6 neuroscience sources for the Pitch Day demo', kind:'map' },
+    { t:'just now', map:'neuro-memory', text:'Compiled **Hippocampus** and **Synaptic Plasticity** into the neuroscience wiki', kind:'add' },
+    { t:'just now', map:'neuro-memory', text:'Transcribed a voice memo into **Reconsolidation** and **Generalization** gaps', kind:'add' },
     { t:'2h ago', map:'ai-self', text:'Wove 2 claims from **Butlin et al. (2023)** into **Self-Awareness**', kind:'add' },
     { t:'2h ago', map:'ai-self', text:'Illuminated **Higher-Order Theories** \u2014 now lightly covered', kind:'light' },
     { t:'1d ago', map:'attention', text:'Created entry **Variable-Ratio Reward** from a longform link', kind:'add' },

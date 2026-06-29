@@ -80,7 +80,7 @@ function summarize(parsed, chunks) {
   return '这条来源的核心线索是：' + first;
 }
 
-function heuristicExtractKnowledge({ parsed, chunks, map, boosts }) {
+function heuristicExtractKnowledge({ parsed, chunks, map, boosts, targetEntryId }) {
   const boostMap = boosts || {};
   const boostedIds = Object.keys(boostMap);
   const nodes = (map && map.nodes) || [];
@@ -103,7 +103,7 @@ function heuristicExtractKnowledge({ parsed, chunks, map, boosts }) {
       claimType: 'evidence',
       stance: 'supports',
       confidence: index === 0 ? 'high' : 'medium',
-      targetEntryId: 'entry-' + node.id,
+      targetEntryId: targetEntryId || ('entry-' + node.id),
       chunkIds: [chunk.id],
     };
   });
@@ -122,7 +122,7 @@ function heuristicExtractKnowledge({ parsed, chunks, map, boosts }) {
   };
 }
 
-function buildLlmPrompt({ parsed, chunks, map, boosts }) {
+function buildLlmPrompt({ parsed, chunks, map, boosts, targetEntryId }) {
   const candidateNodes = ((map && map.nodes) || []).map((node) => ({
     id: node.id,
     label: node.label,
@@ -141,6 +141,7 @@ function buildLlmPrompt({ parsed, chunks, map, boosts }) {
       title: map && map.title,
       candidateNodes,
     },
+    targetWikiEntryId: targetEntryId || '',
     userBoosts: boosts || {},
     chunks: chunks.map((chunk) => ({
       id: chunk.id,
@@ -158,7 +159,7 @@ function buildLlmPrompt({ parsed, chunks, map, boosts }) {
           claimType: 'definition|mechanism|comparison|causal|evidence|recommendation|open_issue|other',
           stance: 'supports|complicates|contradicts|frames|unknown',
           confidence: 'high|medium|low',
-          targetEntryId: 'entry-' + (candidateNodes[0] && candidateNodes[0].id || 'node-id'),
+          targetEntryId: targetEntryId || ('entry-' + (candidateNodes[0] && candidateNodes[0].id || 'node-id')),
           chunkIds: ['must reference chunk ids from chunks'],
         },
       ],
@@ -177,7 +178,7 @@ function buildLlmPrompt({ parsed, chunks, map, boosts }) {
       claims: '2-5 source-grounded assertions worth reviewing.',
       claimType: 'The functional type of the claim.',
       stance: 'How the source positions the claim relative to current understanding.',
-      targetEntryId: 'entry- plus the selected mapNodeId, unless a better existing target is supplied.',
+      targetEntryId: 'Use targetWikiEntryId when supplied; otherwise use entry- plus the selected mapNodeId.',
       concepts: 'Trackable concepts/entities that can merge into wiki/map structure.',
       mergeHint: 'Alias, existing label, or canonical name for concept merge/update.',
       chunkIds: 'Evidence chunk ids from the provided chunks.',
@@ -186,6 +187,7 @@ function buildLlmPrompt({ parsed, chunks, map, boosts }) {
       'Use only the supplied chunks as evidence.',
       'Every claim must be a reviewable, source-grounded assertion with at least one chunk id.',
       'Prefer existing candidate node ids over inventing new ids.',
+      'If targetWikiEntryId is supplied, attach claims to that wiki entry unless the source is clearly unrelated.',
       'Create 2-5 claims; avoid generic summaries.',
       'Choose claimType and stance based on what the source actually says.',
       'Concepts should be entities/ideas the wiki or map can track over time.',
@@ -194,8 +196,8 @@ function buildLlmPrompt({ parsed, chunks, map, boosts }) {
   }, null, 2);
 }
 
-function normalizeLlmExtraction(candidate, parsed, chunks, map) {
-  const fallback = heuristicExtractKnowledge({ parsed, chunks, map, boosts: {} });
+function normalizeLlmExtraction(candidate, parsed, chunks, map, targetEntryId) {
+  const fallback = heuristicExtractKnowledge({ parsed, chunks, map, boosts: {}, targetEntryId });
   const chunkIds = new Set(chunks.map((chunk) => chunk.id));
   const nodes = new Set(((map && map.nodes) || []).map((node) => node.id));
   const firstChunkId = chunks[0] && chunks[0].id;
@@ -228,7 +230,7 @@ function normalizeLlmExtraction(candidate, parsed, chunks, map) {
       claimType: ['definition', 'mechanism', 'comparison', 'causal', 'evidence', 'recommendation', 'open_issue', 'other'].includes(claim.claimType) ? claim.claimType : 'evidence',
       stance: ['supports', 'complicates', 'contradicts', 'frames', 'unknown'].includes(claim.stance) ? claim.stance : 'supports',
       confidence: ['high', 'medium', 'low'].includes(claim.confidence) ? claim.confidence : 'medium',
-      targetEntryId: claim.targetEntryId || 'entry-' + concept.mapNodeId,
+      targetEntryId: targetEntryId || claim.targetEntryId || 'entry-' + concept.mapNodeId,
       chunkIds: ids.length ? ids : concept.chunkIds,
     };
   });
@@ -240,14 +242,14 @@ function normalizeLlmExtraction(candidate, parsed, chunks, map) {
   };
 }
 
-async function llmExtractKnowledge({ parsed, chunks, map, boosts, settings }) {
+async function llmExtractKnowledge({ parsed, chunks, map, boosts, targetEntryId, locale }) {
   const system = [
       'You are Lumen compiler.',
     'You transform sources into grounded knowledge artifacts for a personal wiki and understanding map.',
     'The output feeds human review, wiki writing, graph linking, and citation generation.',
     'Return compact JSON only. Do not invent evidence outside supplied chunks.',
   ].join(' ');
-  const user = buildLlmPrompt({ parsed, chunks, map, boosts });
+  const user = buildLlmPrompt({ parsed, chunks, map, boosts, targetEntryId });
   const llm = await runLlmStage({
     stage: 'extraction',
     schemaName: 'lumen_extraction',
@@ -256,23 +258,24 @@ async function llmExtractKnowledge({ parsed, chunks, map, boosts, settings }) {
     user,
     parsed,
     chunks,
+    locale,
   });
   if (!llm.ok) {
     const error = new Error(llm.error || llm.reason || 'LLM extraction unavailable');
     error.llmStage = llm;
     throw error;
   }
-  const extraction = normalizeLlmExtraction(llm.output, parsed, chunks, map);
+  const extraction = normalizeLlmExtraction(llm.output, parsed, chunks, map, targetEntryId);
   extraction._extractor = 'openai:' + llm.model;
   extraction._llmStages = { extraction: llm };
   return extraction;
 }
 
-async function extractKnowledge({ parsed, chunks, map, boosts }) {
+async function extractKnowledge({ parsed, chunks, map, boosts, targetEntryId, locale }) {
   try {
-    return await llmExtractKnowledge({ parsed, chunks, map, boosts });
+    return await llmExtractKnowledge({ parsed, chunks, map, boosts, targetEntryId, locale });
   } catch (error) {
-    const fallback = heuristicExtractKnowledge({ parsed, chunks, map, boosts });
+    const fallback = heuristicExtractKnowledge({ parsed, chunks, map, boosts, targetEntryId });
     fallback._extractor = String(error.message || '').includes('missing-api-key') || String(error.message || '').includes('stage-disabled')
       ? 'local-heuristic'
       : 'local-heuristic-fallback';

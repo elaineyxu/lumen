@@ -45,7 +45,7 @@ const GRAPH_SCHEMA = {
   required: ['relations'],
 };
 
-async function generateKnowledgeGraph({ extraction, parsed, chunks, map }) {
+async function generateKnowledgeGraph({ extraction, parsed, chunks, map, locale }) {
   const fallback = localGenerateKnowledgeGraph({ extraction });
   const nodeIds = new Set((extraction.concepts || []).map((concept) => concept.mapNodeId));
   const claimIds = new Set((extraction.claims || []).map((claim) => claim.id));
@@ -55,6 +55,7 @@ async function generateKnowledgeGraph({ extraction, parsed, chunks, map }) {
     schema: GRAPH_SCHEMA,
     parsed,
     chunks,
+    locale,
     system: [
       'You are Lumen knowledge graph builder.',
       'You create only relations that are supported by extracted claims.',

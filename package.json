@@ -1,0 +1,21 @@
+{
+  "name": "lumen-mvp",
+  "version": "1.0.0",
+  "description": "This MVP uses the original Lumen HTML prototype as the product shell, with a local Node backend that owns the AI workflow directly in this codebase.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elaineyxu/lumen.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/elaineyxu/lumen/issues"
+  },
+  "homepage": "https://github.com/elaineyxu/lumen#readme"
+}
