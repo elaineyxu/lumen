@@ -1,1 +1,6 @@
 .data/
+.DS_Store
+.claude/
+dist/
+demo-screenshots/
+node_modules/
