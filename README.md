@@ -1,6 +1,6 @@
-# Lumen MVP
+# Lumen
 
-This MVP uses the original Lumen HTML prototype as the product shell, with a local Node backend that owns the AI workflow directly in this codebase.
+Lumen is an AI-native knowledge workspace for turning sources into reviewed claims, citations, wiki updates, and an evolving understanding map. It pairs the original Lumen product shell with a local Node backend that owns the workflow directly in this codebase.
 
 Run:
 
@@ -21,7 +21,7 @@ The formal workspace starts empty. For the guided onboarding/demo seed, open:
 http://127.0.0.1:8787?onboarding=1
 ```
 
-What is implemented:
+What Lumen includes:
 
 - Original Lumen visual system and navigation.
 - Formal workspace defaults to empty data.
@@ -38,7 +38,7 @@ What is implemented:
 - Accepted workflow artifacts are persisted in `.data/knowledge-db.json`; pending proposals stay in compile runs until the user confirms.
 - Quick Capture, Inbox digest/dismiss, Create Map, Settings save, and Add Source apply actions are connected to `/api/*`.
 
-Recommended pitch path:
+Suggested demo path:
 
 1. Open Source.
 2. Click `Add a source`.
@@ -127,7 +127,7 @@ The frontend buttons are wired to these local endpoints:
 
 The formal app should not start with mock knowledge. `app/data.js` keeps one optional onboarding seed under `window.LUMEN_ONBOARDING_DATA`; default `window.LUMEN_DATA` is empty.
 
-The real MVP structure begins at:
+The core product structure begins at:
 
 - `POST /api/compile`
 - `POST /api/reviews/:runId/apply`
@@ -135,4 +135,4 @@ The real MVP structure begins at:
 - `server/schema.js`
 - `server/store.js`
 
-Next step after the pitch: replace JSON file persistence with Postgres/Supabase tables while keeping the same workflow module boundaries.
+Future production work: replace JSON file persistence with Postgres/Supabase tables while keeping the same workflow module boundaries.
