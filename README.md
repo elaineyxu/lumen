@@ -136,3 +136,7 @@ The core product structure begins at:
 - `server/store.js`
 
 Future production work: replace JSON file persistence with Postgres/Supabase tables while keeping the same workflow module boundaries.
+
+## License
+
+Lumen is licensed under the [MIT License](LICENSE).
