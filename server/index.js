@@ -1,9 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { mockCompile } = require('./mockCompiler');
 const { runLumenWorkflow } = require('./workflow');
-const { ingestSource } = require('./workflow/ingestion');
 const { seedMapFromQuestion, reviseMapWithPrompt } = require('./workflow/mapSeeder');
 const { validateCompileResult } = require('./schema');
 const {
@@ -438,14 +436,13 @@ async function handleCompile(req, res) {
   const targetEntryId = body.targetEntryId ? String(body.targetEntryId) : '';
   const locale = body.locale === 'en' ? 'en' : 'zh';
   const aiSettings = readAiSettings();
-  const forceMock = body.engine === 'mock' || process.env.LUMEN_AI_ENGINE === 'mock' || aiSettings.mode === 'mock';
 
   if (!hasSourcePayload(source)) {
     sendJson(res, 400, { error: 'source text, url, messages, or file attachment is required' });
     return;
   }
 
-  if (!forceMock && !hasLlmApiKey(aiSettings)) {
+  if (!hasLlmApiKey(aiSettings)) {
     sendJson(res, 400, {
       error: 'LLM API key is required. Configure OPENAI_API_KEY on the server or save an API key in Settings.',
       code: 'llm_not_configured',
@@ -455,28 +452,17 @@ async function handleCompile(req, res) {
 
   let result;
   let artifacts = null;
-  let engine = 'lumen-workflow';
-  let sourceForRun = source;
+  const engine = 'lumen-workflow';
+  const sourceForRun = source;
   try {
-    if (forceMock) {
-      sourceForRun = await ingestSource(source, { allowAi: false });
-      result = mockCompile({ source: sourceForRun, map, boosts, targetEntryId });
-      engine = 'mock';
-    } else {
-      result = await runLumenWorkflow({ source, map, boosts, targetEntryId, locale });
-      artifacts = result && result._proposalArtifacts;
-    }
+    result = await runLumenWorkflow({ source, map, boosts, targetEntryId, locale });
+    artifacts = result && result._proposalArtifacts;
   } catch (error) {
-    if (!forceMock) {
-      sendJson(res, 502, { error: error.message || String(error), code: 'llm_workflow_failed' });
-      return;
-    }
-    sourceForRun = await ingestSource(source, { allowAi: false });
-    result = mockCompile({ source: sourceForRun, map, boosts, targetEntryId });
-    engine = 'mock';
+    sendJson(res, 502, { error: error.message || String(error), code: 'llm_workflow_failed' });
+    return;
   }
 
-  if (!forceMock && !hasSuccessfulLlmStage(result)) {
+  if (!hasSuccessfulLlmStage(result)) {
     sendJson(res, 502, {
       error: 'No LLM stage completed successfully. Check API key, endpoint, and selected models.',
       code: 'llm_stages_failed',

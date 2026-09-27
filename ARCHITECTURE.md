@@ -17,7 +17,7 @@ The MVP keeps the original Lumen HTML prototype as the product shell and moves t
 2. Workflow Adapter
    - `LumenWorkflow.compileSource(source, config)` is the browser boundary.
    - In `backend` mode it calls `POST /api/compile`.
-   - Explicit mock output exists only for test/demo calls, not as a user-facing mode.
+   - Deterministic output is isolated to test fixtures and is not reachable from the browser or production API.
 
 3. Backend Pipeline
    - `server/workflow/input.js`
@@ -76,7 +76,7 @@ The current backend is intentionally small and dependency-free:
 
 - `server/index.js` serves the app and exposes API routes.
 - `server/workflow/*` owns the compile pipeline.
-- `server/mockCompiler.js` provides explicit test/demo output.
+- `tests/fixtures/compileProposal.js` provides deterministic test-only proposals.
 - `server/schema.js` validates `lumen.compile.v1`.
 - `server/store.js` saves app state, compile runs, and accepted workflow artifacts under `.data/`.
 

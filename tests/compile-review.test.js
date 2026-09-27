@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 const { test } = require('node:test');
+const { compileProposal } = require('./fixtures/compileProposal');
 
 const projectRoot = path.join(__dirname, '..');
 
@@ -27,26 +28,26 @@ test('a source stays pending until review, then persists exactly once', async (t
   fs.mkdirSync(isolatedProject);
   fs.cpSync(path.join(projectRoot, 'server'), path.join(isolatedProject, 'server'), { recursive: true });
   const { route } = require(path.join(isolatedProject, 'server', 'index.js'));
+  const { saveCompileRun } = require(path.join(isolatedProject, 'server', 'store.js'));
 
   const source = { id: 'source-test', type: 'note', title: 'Research note', text: 'Memory consolidation links new evidence to prior concepts.' };
   const map = { id: 'map-test', title: 'Memory', nodes: [{ id: 'memory', label: 'Memory', explored: 0 }], links: [] };
-  const compiled = await request(route, '/api/compile', 'POST', {
-    engine: 'mock', source, map, boosts: { memory: 0.4 }, targetEntryId: 'entry-memory',
-  });
-  assert.equal(compiled.status, 200);
-  assert.equal(compiled.data.engine, 'mock');
-  assert.match(compiled.data.runId, /^run-/);
+  const compiled = saveCompileRun(compileProposal({
+    source, map, boosts: { memory: 0.4 }, targetEntryId: 'entry-memory',
+  }));
+  assert.equal(compiled.engine, 'test-fixture');
+  assert.match(compiled.id, /^run-/);
 
   const pendingWorkspace = await request(route, '/api/workspace');
   const pendingKnowledge = await request(route, '/api/knowledge');
   assert.equal(pendingWorkspace.data.state.sources.length, 0);
   assert.equal(pendingKnowledge.data.database.revision, 0);
 
-  const applyPath = `/api/reviews/${compiled.data.runId}/apply`;
+  const applyPath = `/api/reviews/${compiled.id}/apply`;
   const rejected = await request(route, applyPath, 'POST', {
     mapId: map.id,
     result: {
-      ...compiled.data.result,
+      ...compiled.result,
       feedback: { recommendation: 'reject', reviewNotes: [], nextActions: [] },
     },
   });
@@ -78,11 +79,10 @@ test('a source stays pending until review, then persists exactly once', async (t
   assert.equal((await request(route, '/api/workspace')).data.state.sources.length, 1);
 
   const secondSource = { ...source, id: 'source-test-2', title: 'Second research note' };
-  const secondCompile = await request(route, '/api/compile', 'POST', {
-    engine: 'mock', source: secondSource, map, boosts: { memory: 0.3 }, targetEntryId: 'entry-memory',
-  });
-  assert.equal(secondCompile.status, 200);
-  const secondApply = await request(route, `/api/reviews/${secondCompile.data.runId}/apply`, 'POST', { mapId: map.id });
+  const secondCompile = saveCompileRun(compileProposal({
+    source: secondSource, map, boosts: { memory: 0.3 }, targetEntryId: 'entry-memory',
+  }));
+  const secondApply = await request(route, `/api/reviews/${secondCompile.id}/apply`, 'POST', { mapId: map.id });
   assert.equal(secondApply.status, 200);
   const combined = (await request(route, '/api/knowledge')).data.database;
   assert.equal(combined.citations.length, 4);

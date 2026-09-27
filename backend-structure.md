@@ -35,7 +35,7 @@ Replace next:
 - `server/workflow/feedbackGenerator.js` creates review notes and next actions.
 - `server/workflow/database.js` persists workflow artifacts through `server/store.js`.
 - `server/schema.js` validates `lumen.compile.v1`.
-- `server/mockCompiler.js` is an explicit demo compiler for Mock mode.
+- Deterministic compile proposals live only under `tests/fixtures/`; production routes always use the internal AI workflow.
 - `server/store.js` stores recent compile runs, app state, local AI settings, and the JSON-backed knowledge database in `.data/`.
 
 ## API Boundary
@@ -96,13 +96,6 @@ Then open:
 
 ```text
 http://127.0.0.1:8787
-```
-
-Optional mock mode:
-
-```bash
-export LUMEN_AI_ENGINE=mock
-node server/index.js
 ```
 
 ## Next Backend Milestone

@@ -67,9 +67,9 @@ upload/input
   -> database
 ```
 
-The normal endpoint is AI-native: without an API key, source compile and question-to-map creation return configuration errors. Deterministic code paths remain only as internal development/test fallbacks.
+The normal endpoint is AI-native: without an API key, source compile and question-to-map creation return configuration errors. Deterministic proposal generation exists only in the test suite.
 
-The normal compile path uses the internal Lumen workflow and requires an LLM API key. Mock output is only for explicit test/demo requests, not a Settings mode.
+The compile path uses the internal Lumen workflow and requires an LLM API key. Deterministic proposals are isolated to test fixtures and are not exposed through the product API.
 
 `POST /api/maps` also uses the internal AI workflow. A user question is sent to `server/workflow/mapSeeder.js`, which returns a bounded seeded knowledge graph with title, domain, clusters, nodes, and links. This route requires the same API key and rejects invalid LLM output instead of creating a placeholder map.
 
