@@ -4,7 +4,7 @@
   "description": "This MVP uses the original Lumen HTML prototype as the product shell, with a local Node backend that owns the AI workflow directly in this codebase.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test tests/*.test.js"
   },
   "repository": {
     "type": "git",

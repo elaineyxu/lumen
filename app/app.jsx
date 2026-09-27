@@ -72,6 +72,7 @@ function App() {
   const [inbox, setInbox] = useStateApp(baseData.INBOX);
   const [reviewInbox, setReviewInbox] = useStateApp(false);  // open Sources on the Inbox filter
   const [wikiProposals, setWikiProposals] = useStateApp([]);
+  const [mapEvidence, setMapEvidence] = useStateApp([]);
 
   const applyWorkspaceState = (payload)=>{
     const state = payload && payload.state ? payload.state : payload;
@@ -90,6 +91,7 @@ function App() {
   };
 
   const loadAcceptedWikiProposals = (database)=>{
+    setMapEvidence(database && Array.isArray(database.mapNodeEvidence) ? database.mapNodeEvidence : []);
     const rows = database && Array.isArray(database.wikiEntries) ? database.wikiEntries : [];
     setWikiProposals(prev=>{
       const accepted = rows.map((row, index)=>({
@@ -101,7 +103,7 @@ function App() {
         boosts:{},
         result:null,
         status:'accepted',
-        entryId:row.id,
+        entryId:row.entryId || row.id,
         heading:row.heading,
         body:row.body,
         patchStatus:row.status || 'append',
@@ -531,7 +533,7 @@ function App() {
             onReviewInbox={goReviewInbox} />
         )}
         {view==='atlas' && (
-          <Atlas data={data} litMap={activeLit} litByMap={litByMap} lineStyle={t.lines}
+          <Atlas data={data} litMap={activeLit} litByMap={litByMap} mapEvidence={mapEvidence} lineStyle={t.lines}
             activeMapId={activeMapId} setActiveMapId={setActiveMapId}
             selected={mapSelected} setSelected={setMapSelected}
             onOpenEntry={openEntry}

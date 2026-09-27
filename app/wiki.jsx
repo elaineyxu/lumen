@@ -48,7 +48,7 @@ function WikiView({ data, litByMap,
     if(t&&rail) rail.scrollTo({ top: t.offsetTop-12, behavior:'smooth' });
     setTimeout(()=>setHiCite(c=>c===n?null:c), 2200);
   };
-  const linkOpts = { onLink:(id)=>openEntry(id), onCite };
+  const linkOpts = { onLink:(id)=>openEntry(id), onCite, onOpenSource };
 
   return (
     <div style={{ position:'absolute', inset:0, display:'grid', gridTemplateColumns:'258px minmax(0,1fr) 300px',
@@ -283,6 +283,21 @@ function Article({ entry, litMap, opts, proposals=[], onApplyProposal, onDismiss
         <section key={sec.id} style={{ marginTop:40 }}>
           <h2 style={h2Style}>{sec.heading}</h2>
           {sec.blocks.map((b,i)=><Block key={i} b={b} opts={opts} />)}
+          {Array.isArray(sec.evidence) && sec.evidence.length > 0 && (
+            <div style={{ display:'grid', gap:8, marginTop:14 }}>
+              <div className="mono-label" style={{ color:'var(--ink-3)' }}>{window.LANG === 'zh' ? '来源依据' : 'Source evidence'}</div>
+              {sec.evidence.map((item)=>(
+                <button key={item.id} onClick={()=>opts.onOpenSource && opts.onOpenSource(item.sourceId)}
+                  style={{ textAlign:'left', padding:'10px 12px', border:'1px solid var(--hair-soft)', borderRadius:10,
+                    background:'var(--card)', color:'var(--ink-2)', cursor:'pointer' }}>
+                  <span className="mono-label" style={{ display:'block', marginBottom:5, color:'var(--accent)' }}>
+                    {item.sourceTitle || item.sourceId} · {item.locator || 'citation'}
+                  </span>
+                  <span style={{ fontSize:13, lineHeight:1.5 }}>{item.quote || item.claimText}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </section>
       ))}
 

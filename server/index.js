@@ -16,6 +16,7 @@ const {
   writeAiSettings,
   readKnowledgeDb,
   saveKnowledgeRecords,
+  evidenceForClaims,
 } = require('./store');
 
 const ROOT = path.join(__dirname, '..');
@@ -179,7 +180,7 @@ function titleForPatch(patch, result, mapRef) {
   return patch.heading || 'Untitled wiki entry';
 }
 
-function mergeWikiPatchIntoEntry(baseEntry, patch, result, source, mapId, sourceNumber) {
+function mergeWikiPatchIntoEntry(baseEntry, patch, result, source, mapId, sourceNumber, chunks) {
   const mapRef = inferPatchMapRef(patch, result, mapId);
   const now = 'Updated just now · synthesised from your sources';
   const entry = {
@@ -219,6 +220,7 @@ function mergeWikiPatchIntoEntry(baseEntry, patch, result, source, mapId, source
     blocks: [nextBlock],
     sourceIds: [source.id],
     evidenceClaimIds: patch.evidenceClaimIds || [],
+    evidence: evidenceForClaims(result, patch.evidenceClaimIds || [], source, chunks),
     updateRule: patch.updateRule || 'new_evidence',
     status: patch.status || 'append',
   };
@@ -235,6 +237,7 @@ function mergeWikiPatchIntoEntry(baseEntry, patch, result, source, mapId, source
       blocks: mergedBlocks,
       sourceIds: Array.from(new Set([...(existing.sourceIds || []), source.id])),
       evidenceClaimIds: Array.from(new Set([...(existing.evidenceClaimIds || []), ...(patch.evidenceClaimIds || [])])),
+      evidence: Array.from(new Map([...(existing.evidence || []), ...nextSection.evidence].map((item) => [item.id, item])).values()),
       updateRule: patch.updateRule || existing.updateRule || 'new_evidence',
       status: patch.status || existing.status || 'append',
     } : section);
@@ -256,7 +259,7 @@ function materializeWikiEntries(current, run, result, source, mapId, body, sourc
   patches.forEach((patch) => {
     if (!patch || !patch.entryId || !patch.heading || !patch.body) return;
     const baseEntry = byId.get(patch.entryId) || snapshots[patch.entryId] || null;
-    byId.set(patch.entryId, mergeWikiPatchIntoEntry(baseEntry, patch, result, source, mapId, sourceNumber));
+    byId.set(patch.entryId, mergeWikiPatchIntoEntry(baseEntry, patch, result, source, mapId, sourceNumber, run.artifacts && run.artifacts.chunks));
   });
   return Array.from(byId.values());
 }
@@ -281,6 +284,9 @@ function sourceFromRun(run, mapId, result, boosts) {
     type: uiType,
     kind: metadata.kind || (artifactSource && artifactSource.kind) || source.type || 'note',
     title: metadata.title || source.title || 'Compiled source',
+    url: metadata.url || source.url || '',
+    citations: evidenceForClaims(result, (result.claims || []).map((claim) => claim.id),
+      { id: source.id, title: metadata.title || source.title || 'Compiled source' }, run.artifacts && run.artifacts.chunks),
     meta: [
       'AI workflow compile',
       metadata.language && metadata.language !== 'unknown' ? metadata.language : '',
@@ -306,6 +312,7 @@ function knowledgeRecordsFromRun(run, source, result) {
   if (artifacts && artifacts.source) {
     return {
       source: { ...artifacts.source, id: source.id },
+      mapId: run.map && run.map.id,
       chunks: Array.isArray(artifacts.chunks) ? artifacts.chunks : [],
       result,
     };
@@ -322,6 +329,7 @@ function knowledgeRecordsFromRun(run, source, result) {
         type: source.type || raw.type || 'note',
       },
     },
+    mapId: run.map && run.map.id,
     chunks: [],
     result,
   };
@@ -895,4 +903,6 @@ function listen(port, attempt) {
   });
 }
 
-listen(PORT, 0);
+if (require.main === module) listen(PORT, 0);
+
+module.exports = { route };

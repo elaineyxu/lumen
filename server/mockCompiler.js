@@ -19,20 +19,22 @@ function mockCompile({ source, map, boosts, targetEntryId }) {
   const sourceId = source.id || 'source-local';
   const title = source.title || '新来源';
   const target = targetEntryId || ('entry-' + primary);
+  const firstClaimId = 'claim-' + Date.now() + '-1';
+  const secondClaimId = 'claim-' + Date.now() + '-2';
 
   return {
     schemaVersion: SCHEMA_VERSION,
     sourceSummary: 'Lumen 已把「' + title + '」编纂为可审阅的论点、概念节点、Wiki 更新与开放问题。当前结果来自后端 mock compiler。',
     claims: [
       {
-        id: 'claim-' + Date.now() + '-1',
+        id: firstClaimId,
         text: '这条来源强化了「' + nodeLabel(map, primary) + '」在当前理解地图中的重要性。',
         confidence: 'high',
         citationIds: ['cite-1'],
         targetEntryId: target,
       },
       {
-        id: 'claim-' + Date.now() + '-2',
+        id: secondClaimId,
         text: '它同时说明 Lumen 需要保留人类审阅环节，而不是直接把 AI 输出写入知识库。',
         confidence: 'medium',
         citationIds: ['cite-2'],
@@ -51,12 +53,14 @@ function mockCompile({ source, map, boosts, targetEntryId }) {
         operation: 'append_section',
         heading: '新来源带来的判断更新',
         body: '这条来源被拆解为 claim、citation、concept 与 map update。用户审阅后，它才会点亮理解地图，并扩充相关 Wiki 词条。',
+        evidenceClaimIds: [firstClaimId, secondClaimId],
       },
     ],
     mapUpdates: litIds.map((nodeId) => ({
       nodeId,
       delta: boostMap[nodeId],
       reason: '来源触及「' + nodeLabel(map, nodeId) + '」',
+      evidenceClaimIds: [firstClaimId],
     })),
     openQuestions: [
       {

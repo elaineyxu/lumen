@@ -7,7 +7,7 @@ function effExplored(node, litMap){
   return Math.min(1, node.explored + (litMap[node.id]||0));
 }
 
-function ExpertMap({ map, litMap, lineStyle, onOpenEntry, onAddSource, onReviseMap, selected, setSelected }) {
+function ExpertMap({ map, litMap, mapEvidence=[], lineStyle, onOpenEntry, onOpenSource, onAddSource, onReviseMap, selected, setSelected }) {
   const { nodes:NODES, links:LINKS, clusters:CLUSTERS } = map;
   const wrapRef = useRefM(null);
   const dragRef = useRefM(null);
@@ -323,7 +323,7 @@ function ExpertMap({ map, litMap, lineStyle, onOpenEntry, onAddSource, onReviseM
 
       {/* selected node detail */}
       {selNode && (
-        <div data-map-ui style={{ position:'absolute', bottom:24, right:28, zIndex:45, width:300, animation:'fadeUp .35s ease', cursor:'default' }}>
+        <div data-map-ui style={{ position:'absolute', bottom:24, right:28, zIndex:45, width:300, maxHeight:'70vh', overflowY:'auto', animation:'fadeUp .35s ease', cursor:'default' }}>
           <Frost style={{ padding:18 }}>
             <button onClick={()=>setSelected(null)} style={detailClose}><Icon name="close" s={14}/></button>
             <div className="mono-label" style={{ color:hueColor(selNode.hue) }}>{CLUSTERS[selNode.cluster].label}</div>
@@ -339,6 +339,16 @@ function ExpertMap({ map, litMap, lineStyle, onOpenEntry, onAddSource, onReviseM
                 <div style={{ marginTop:12, fontSize:13, color:'var(--ink-2)', lineHeight:1.5 }}>
                   {window.t('drawn_from_pre')}<strong style={{ fontWeight:600, color:'var(--ink)' }}>{selNode.sources}</strong> {window.t('drawn_from', selNode.sources)}
                 </div>
+                {mapEvidence.filter(item=>item.nodeId===selNode.id && (!item.mapId || item.mapId===map.id) && Array.isArray(item.evidence) && item.evidence.length).slice(0,3).map(item=>(
+                  <button key={item.id} onClick={()=>onOpenSource && onOpenSource(item.sourceId)}
+                    style={{ display:'block', width:'100%', textAlign:'left', marginTop:9, padding:'9px 10px', border:'1px solid var(--hair-soft)',
+                      borderRadius:9, background:'var(--card)', color:'var(--ink-2)', cursor:'pointer' }}>
+                    <span className="mono-label" style={{ display:'block', color:'var(--accent)', marginBottom:4 }}>
+                      {item.evidence[0].sourceTitle || item.sourceId} · {item.evidence[0].locator || 'citation'}
+                    </span>
+                    <span style={{ fontSize:12, lineHeight:1.4 }}>{item.evidence[0].quote || item.reason}</span>
+                  </button>
+                ))}
                 <div style={{ display:'flex', gap:8, marginTop:16 }}>
                   <button onClick={()=>onOpenEntry(eid)}
                     title={lit?window.t('open_in_wiki'):window.t('open_wiki_gap')}

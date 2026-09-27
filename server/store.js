@@ -33,6 +33,7 @@ const DEFAULT_KNOWLEDGE_DB = {
   revision: 0,
   sources: [],
   sourceChunks: [],
+  claims: [],
   wikiEntries: [],
   concepts: [],
   relations: [],
@@ -195,6 +196,7 @@ function writeKnowledgeDb(db) {
     ...(db || {}),
     sources: Array.isArray(db && db.sources) ? db.sources : [],
     sourceChunks: Array.isArray(db && db.sourceChunks) ? db.sourceChunks : [],
+    claims: Array.isArray(db && db.claims) ? db.claims : [],
     wikiEntries: Array.isArray(db && db.wikiEntries) ? db.wikiEntries : [],
     concepts: Array.isArray(db && db.concepts) ? db.concepts : [],
     relations: Array.isArray(db && db.relations) ? db.relations : [],
@@ -215,16 +217,47 @@ function uniqueById(items) {
   });
 }
 
+function evidenceForClaims(result, claimIds, source, chunks) {
+  const sourceId = source.id;
+  const requested = new Set(Array.isArray(claimIds) ? claimIds : []);
+  const citations = new Map((result.citations || []).map((citation) => [citation.id, citation]));
+  const sourceChunks = new Map((chunks || []).map((chunk) => [chunk.id, chunk]));
+  const evidence = [];
+  (result.claims || []).filter((claim) => requested.has(claim.id)).forEach((claim) => {
+    (claim.citationIds || []).forEach((citationId) => {
+      const citation = citations.get(citationId);
+      if (!citation || (citation.sourceId && citation.sourceId !== sourceId)) return;
+      const chunk = sourceChunks.get(citation.chunkId);
+      if (sourceChunks.size && (!chunk || chunk.sourceId !== sourceId)) return;
+      evidence.push({
+        id: sourceId + ':' + claim.id + ':' + citation.id,
+        sourceId,
+        sourceTitle: source.title || '',
+        claimId: sourceId + ':' + claim.id,
+        claimText: claim.text,
+        chunkId: citation.chunkId || null,
+        quote: chunk ? String(chunk.text || '').slice(0, 320) : citation.quote || '',
+        locator: citation.locator || '',
+        start: chunk && Number.isFinite(chunk.start) ? chunk.start : null,
+        end: chunk && Number.isFinite(chunk.end) ? chunk.end : null,
+      });
+    });
+  });
+  return evidence.filter((item, index, all) => all.findIndex((other) => other.id === item.id) === index);
+}
+
 function saveKnowledgeRecords(records) {
   const current = readKnowledgeDb();
   const result = records.result || {};
   const source = records.source || {};
   const chunks = records.chunks || [];
   const sourceId = source.id;
+  const chunkById = new Map(chunks.map((chunk) => [chunk.id, chunk]));
   const revision = Number(current.revision || 0) + 1;
 
-  const wikiEntries = (result.wikiPatches || []).map((patch) => ({
-    id: patch.entryId,
+  const wikiEntries = (result.wikiPatches || []).map((patch, index) => ({
+    id: sourceId + ':' + patch.entryId + ':' + index,
+    entryId: patch.entryId,
     sourceId,
     sourceTitle: source.title || (source.metadata && source.metadata.title) || '',
     sourceKind: source.kind || source.type || '',
@@ -233,22 +266,25 @@ function saveKnowledgeRecords(records) {
     body: patch.body,
     status: patch.status || 'append',
     updateRule: patch.updateRule || 'new_evidence',
-    evidenceClaimIds: patch.evidenceClaimIds || [],
+    evidenceClaimIds: (patch.evidenceClaimIds || []).map((id) => sourceId + ':' + id),
+    evidence: evidenceForClaims(result, patch.evidenceClaimIds || [], source, chunks),
     mapRefs: (result.concepts || [])
       .filter((concept) => concept && ('entry-' + concept.mapNodeId === patch.entryId || concept.mapNodeId === patch.entryId))
       .map((concept) => ({ node: concept.mapNodeId, label: concept.label })),
     updatedAt: new Date().toISOString(),
   }));
   const mapNodeEvidence = (result.mapUpdates || []).map((update) => ({
-    id: sourceId + ':' + update.nodeId,
+    id: sourceId + ':' + (records.mapId || 'unmapped') + ':' + update.nodeId,
     sourceId,
+    mapId: records.mapId || null,
     nodeId: update.nodeId,
     delta: update.delta,
     reason: update.reason,
     coverage: update.coverage || 'partial',
     nextGap: update.nextGap || '',
     updateRule: update.updateRule || 'new_node_evidence',
-    evidenceClaimIds: update.evidenceClaimIds || [],
+    evidenceClaimIds: (update.evidenceClaimIds || []).map((id) => sourceId + ':' + id),
+    evidence: evidenceForClaims(result, update.evidenceClaimIds || [], source, chunks),
   }));
   const feedback = result.feedback ? [{
     id: sourceId + ':feedback',
@@ -268,10 +304,35 @@ function saveKnowledgeRecords(records) {
     revision,
     sources: uniqueById([{ ...source, updatedAt: new Date().toISOString() }, ...(current.sources || [])]),
     sourceChunks: uniqueById([...chunks, ...(current.sourceChunks || [])]),
+    claims: uniqueById([...(result.claims || []).map((claim) => ({
+      ...claim,
+      id: sourceId + ':' + claim.id,
+      sourceId,
+      citationIds: (claim.citationIds || []).map((id) => sourceId + ':' + id),
+    })), ...(current.claims || [])]),
     wikiEntries: uniqueById([...wikiEntries, ...(current.wikiEntries || [])]),
     concepts: uniqueById([...(result.concepts || []), ...(current.concepts || [])]),
-    relations: uniqueById([...(result.relations || []), ...(current.relations || [])]),
-    citations: uniqueById([...(result.citations || []), ...(current.citations || [])]),
+    relations: uniqueById([...(result.relations || []).map((relation) => ({
+      ...relation,
+      id: sourceId + ':' + relation.id,
+      sourceId,
+      mapId: records.mapId || null,
+      evidenceClaimIds: (relation.evidenceClaimIds || []).map((id) => sourceId + ':' + id),
+      evidence: evidenceForClaims(result, relation.evidenceClaimIds || [], source, chunks),
+    })), ...(current.relations || [])]),
+    citations: uniqueById([...(result.citations || [])
+      .filter((citation) => !chunks.length || (chunkById.has(citation.chunkId) && chunkById.get(citation.chunkId).sourceId === sourceId))
+      .map((citation) => {
+        const chunk = chunkById.get(citation.chunkId);
+        return {
+          ...citation,
+          id: sourceId + ':' + citation.id,
+          sourceId,
+          quote: chunk ? String(chunk.text || '').slice(0, 320) : citation.quote || '',
+          start: chunk && Number.isFinite(chunk.start) ? chunk.start : null,
+          end: chunk && Number.isFinite(chunk.end) ? chunk.end : null,
+        };
+      }), ...(current.citations || [])]),
     mapNodeEvidence: uniqueById([...mapNodeEvidence, ...(current.mapNodeEvidence || [])]),
     feedback: uniqueById([...feedback, ...(current.feedback || [])]),
   });
@@ -289,4 +350,5 @@ module.exports = {
   readKnowledgeDb,
   writeKnowledgeDb,
   saveKnowledgeRecords,
+  evidenceForClaims,
 };
